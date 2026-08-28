@@ -1,0 +1,2676 @@
+From fd76db95cc33a32ffcae397705147c76b0bc639f Mon Sep 17 00:00:00 2001
+From: 23rd <23rd@vivaldi.net>
+Date: Fri, 28 Aug 2026 10:55:36 +0000
+Subject: [PATCH 4/6] Added ANGLE OpenGL ES and EGL backend from Krita fork.
+
+---
+ .../find-modules/FindEGL.cmake                | 102 +--
+ cmake/FindGLESv2.cmake                        |   2 +-
+ mkspecs/features/win32/opengl.prf             |   5 -
+ src/gui/CMakeLists.txt                        |  19 +-
+ src/gui/configure.cmake                       |  29 +-
+ src/gui/kernel/qopenglcontext.cpp             |   8 +-
+ src/gui/kernel/qplatformintegration.cpp       |   5 +
+ src/gui/kernel/qplatformopenglcontext.h       |   1 +
+ src/gui/kernel/qsurfaceformat.cpp             |  11 +
+ src/gui/kernel/qsurfaceformat.h               |   4 +-
+ .../opengl/platform/egl/qeglconvenience.cpp   | 127 ++-
+ .../opengl/platform/egl/qeglconvenience_p.h   |  31 +-
+ .../egl/qeglnativeinterfacecommon.cpp         |  87 ++
+ .../platform/egl/qeglplatformcontext.cpp      |   2 +-
+ .../qbackingstoredefaultcompositor.cpp        |  57 ++
+ .../qbackingstoredefaultcompositor_p.h        |   5 +
+ src/gui/painting/qplatformbackingstore.cpp    |  10 +
+ src/gui/painting/qplatformbackingstore.h      |   3 +
+ .../platform/unix/qunixnativeinterface.cpp    |  70 --
+ src/gui/rhi/qrhigles2.cpp                     |   4 +-
+ src/gui/rhi/qrhigles2_p.h                     |   4 +-
+ src/opengl/CMakeLists.txt                     |   2 +-
+ src/opengl/qopenglpaintengine.cpp             |  31 +-
+ src/opengl/qopenglpaintengine_p.h             |   4 +
+ src/plugins/platforms/direct2d/CMakeLists.txt |  12 +-
+ src/plugins/platforms/windows/CMakeLists.txt  |   6 +-
+ .../platforms/windows/qwindowseglcontext.cpp  | 750 ++++++++++++++++++
+ .../platforms/windows/qwindowseglcontext.h    | 167 ++++
+ .../platforms/windows/qwindowsglcontext.cpp   |   4 +-
+ .../platforms/windows/qwindowsglcontext.h     |   2 +-
+ .../platforms/windows/qwindowsintegration.cpp |  54 +-
+ .../platforms/windows/qwindowsintegration.h   |   6 +
+ .../windows/qwindowsnativeinterface.cpp       |  31 +
+ .../platforms/windows/qwindowsopenglcontext.h |  14 +-
+ .../windows/qwindowsopengltester.cpp          |  69 +-
+ .../platforms/windows/qwindowsopengltester.h  |   9 +
+ .../platforms/windows/qwindowswindow.cpp      |  17 +-
+ src/widgets/kernel/qwidget.cpp                |  12 +
+ src/widgets/kernel/qwidget_p.h                |   2 +
+ src/widgets/kernel/qwidgetwindow.cpp          |  15 +
+ 40 files changed, 1541 insertions(+), 252 deletions(-)
+ create mode 100644 src/gui/opengl/platform/egl/qeglnativeinterfacecommon.cpp
+ create mode 100644 src/plugins/platforms/windows/qwindowseglcontext.cpp
+ create mode 100644 src/plugins/platforms/windows/qwindowseglcontext.h
+
+diff --git a/cmake/3rdparty/extra-cmake-modules/find-modules/FindEGL.cmake b/cmake/3rdparty/extra-cmake-modules/find-modules/FindEGL.cmake
+index 420d06bb..250446a9 100644
+--- a/cmake/3rdparty/extra-cmake-modules/find-modules/FindEGL.cmake
++++ b/cmake/3rdparty/extra-cmake-modules/find-modules/FindEGL.cmake
+@@ -1,64 +1,42 @@
+-#.rst:
+-# FindEGL
+-# -------
++# SPDX-FileCopyrightText: 2014 Alex Merry <alex.merry@kde.org>
++# SPDX-FileCopyrightText: 2014 Martin Gräßlin <mgraesslin@kde.org>
+ #
+-# Try to find EGL.
+-#
+-# This will define the following variables:
+-#
+-# ``EGL_FOUND``
+-#     True if (the requested version of) EGL is available
+-# ``EGL_VERSION``
+-#     The version of EGL; note that this is the API version defined in the
+-#     headers, rather than the version of the implementation (eg: Mesa)
+-# ``EGL_LIBRARIES``
+-#     This can be passed to target_link_libraries() instead of the ``EGL::EGL``
+-#     target
+-# ``EGL_INCLUDE_DIRS``
+-#     This should be passed to target_include_directories() if the target is not
+-#     used for linking
+-# ``EGL_DEFINITIONS``
+-#     This should be passed to target_compile_options() if the target is not
+-#     used for linking
+-#
+-# If ``EGL_FOUND`` is TRUE, it will also define the following imported target:
+-#
+-# ``EGL::EGL``
+-#     The EGL library
+-#
+-# In general we recommend using the imported target, as it is easier to use.
+-# Bear in mind, however, that if the target is in the link interface of an
+-# exported library, it must be made available by the package config file.
+-#
+-# Since pre-1.0.0.
++# SPDX-License-Identifier: BSD-3-Clause
+ 
+-#=============================================================================
+-# Copyright 2014 Alex Merry <alex.merry@kde.org>
+-# Copyright 2014 Martin Gräßlin <mgraesslin@kde.org>
+-#
+-# Redistribution and use in source and binary forms, with or without
+-# modification, are permitted provided that the following conditions
+-# are met:
+-#
+-# 1. Redistributions of source code must retain the copyright
+-#    notice, this list of conditions and the following disclaimer.
+-# 2. Redistributions in binary form must reproduce the copyright
+-#    notice, this list of conditions and the following disclaimer in the
+-#    documentation and/or other materials provided with the distribution.
+-# 3. The name of the author may not be used to endorse or promote products
+-#    derived from this software without specific prior written permission.
+-#
+-# THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+-# IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+-# OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+-# IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+-# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+-# NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+-# DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+-# THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+-# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+-# THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+-#=============================================================================
++#[=======================================================================[.rst:
++FindEGL
++-------
++
++Try to find EGL.
++
++This will define the following variables:
++
++``EGL_FOUND``
++    True if (the requested version of) EGL is available
++``EGL_VERSION``
++    The version of EGL; note that this is the API version defined in the
++    headers, rather than the version of the implementation (eg: Mesa)
++``EGL_LIBRARIES``
++    This can be passed to target_link_libraries() instead of the ``EGL::EGL``
++    target
++``EGL_INCLUDE_DIRS``
++    This should be passed to target_include_directories() if the target is not
++    used for linking
++``EGL_DEFINITIONS``
++    This should be passed to target_compile_options() if the target is not
++    used for linking
++
++If ``EGL_FOUND`` is TRUE, it will also define the following imported target:
++
++``EGL::EGL``
++    The EGL library
++
++In general we recommend using the imported target, as it is easier to use.
++Bear in mind, however, that if the target is in the link interface of an
++exported library, it must be made available by the package config file.
++
++Since pre-1.0.0.
++#]=======================================================================]
+ 
+ include(${CMAKE_CURRENT_LIST_DIR}/ECMFindModuleHelpersStub.cmake)
+ include(CheckCXXSourceCompiles)
+@@ -82,6 +60,7 @@ find_path(EGL_INCLUDE_DIR
+ find_library(EGL_LIBRARY
+     NAMES
+         EGL
++        libEGL
+     HINTS
+         ${PKG_EGL_LIBRARY_DIRS}
+ )
+@@ -128,9 +107,8 @@ endif()
+ check_cxx_source_compiles("
+ #include <EGL/egl.h>
+ 
+-int main(int, char **) {
+-    [[maybe_unused]] EGLint x = 0;
+-    EGLDisplay dpy = 0; EGLContext ctx = 0;
++int main(int argc, char *argv[]) {
++    EGLint x = 0; EGLDisplay dpy = 0; EGLContext ctx = 0;
+     eglDestroyContext(dpy, ctx);
+ }" HAVE_EGL)
+ 
+diff --git a/cmake/FindGLESv2.cmake b/cmake/FindGLESv2.cmake
+index b28d8a14..38a9fd10 100644
+--- a/cmake/FindGLESv2.cmake
++++ b/cmake/FindGLESv2.cmake
+@@ -8,7 +8,7 @@ include(CheckCXXSourceCompiles)
+ if(EMSCRIPTEN)
+     set(HAVE_GLESv2 ON)
+ else()
+-    find_library(GLESv2_LIBRARY NAMES GLESv2 OpenGLES)
++    find_library(GLESv2_LIBRARY NAMES GLESv2 libGLESv2 OpenGLES)
+     find_path(GLESv2_INCLUDE_DIR NAMES "GLES2/gl2.h" "OpenGLES/ES2/gl.h" DOC "The OpenGLES 2 include path")
+     find_package(EGL)
+     set(_libraries "${CMAKE_REQUIRED_LIBRARIES}")
+diff --git a/mkspecs/features/win32/opengl.prf b/mkspecs/features/win32/opengl.prf
+index a4aca843..5dc3092a 100644
+--- a/mkspecs/features/win32/opengl.prf
++++ b/mkspecs/features/win32/opengl.prf
+@@ -1,6 +1 @@
+ QT_FOR_CONFIG += gui
+-
+-!qtConfig(dynamicgl) {
+-    QMAKE_LIBS += $$QMAKE_LIBS_OPENGL
+-    QMAKE_LFLAGS += $$QMAKE_LFLAGS_OPENGL
+-}
+diff --git a/src/gui/CMakeLists.txt b/src/gui/CMakeLists.txt
+index b04556eb..81a2f4b8 100644
+--- a/src/gui/CMakeLists.txt
++++ b/src/gui/CMakeLists.txt
+@@ -358,7 +358,6 @@ qt_internal_extend_target(Gui CONDITION QT_FEATURE_standarditemmodel
+ # used direct public linkage against either libGLESv2 or libGL, depending
+ # on the opengl _feature_. This is done by hand now here (where the
+ # feature is available).
+-# On Windows with 'dynamic' OpenGL we must not link to opengl32.
+ # DO NOT MOVE THIS TO THE BEGINNING OF THE FILE, the feature variables are not
+ # available until the qt_internal_add_module call.
+ if(QT_FEATURE_opengl)
+@@ -372,7 +371,8 @@ if(QT_FEATURE_opengl)
+                     PlatformGraphics::PlatformGraphics
+             )
+         endif()
+-    elseif(NOT QT_FEATURE_opengl_dynamic)
++
++    elseif(NOT WIN32) # we don't need direct linking of desktopGL on Windows
+         target_link_libraries(Gui PUBLIC WrapOpenGL::WrapOpenGL)
+     endif()
+ endif()
+@@ -524,8 +524,19 @@ endif()
+ qt_internal_extend_target(Gui CONDITION QT_FEATURE_egl
+     SOURCES
+         opengl/platform/egl/qeglconvenience.cpp opengl/platform/egl/qeglconvenience_p.h
+-        opengl/platform/egl/qeglstreamconvenience.cpp opengl/platform/egl/qeglstreamconvenience_p.h
++        opengl/platform/egl/qeglnativeinterfacecommon.cpp
+         opengl/platform/egl/qt_egl_p.h
++)
++
++if(QT_FEATURE_egl_convenience_direct_linking)
++    target_link_libraries(Gui PRIVATE EGL::EGL)
++elseif(QT_FEATURE_egl)
++    qt_internal_add_target_include_dirs(Gui EGL::EGL)
++endif()
++
++qt_internal_extend_target(Gui CONDITION QT_FEATURE_egl AND NOT WIN32
++    SOURCES
++        opengl/platform/egl/qeglstreamconvenience.cpp opengl/platform/egl/qeglstreamconvenience_p.h
+     LIBRARIES
+         EGL::EGL
+ )
+@@ -911,7 +922,7 @@ qt_internal_extend_target(Gui CONDITION QT_FEATURE_opengles2
+         opengl/qopengles2ext.h
+ )
+ 
+-qt_internal_extend_target(Gui CONDITION QT_FEATURE_egl AND QT_FEATURE_opengl AND NOT WASM
++qt_internal_extend_target(Gui CONDITION QT_FEATURE_egl AND QT_FEATURE_opengl AND NOT WASM AND NOT WIN32
+     SOURCES
+         opengl/platform/egl/qeglpbuffer.cpp opengl/platform/egl/qeglpbuffer_p.h
+         opengl/platform/egl/qeglplatformcontext.cpp opengl/platform/egl/qeglplatformcontext_p.h
+diff --git a/src/gui/configure.cmake b/src/gui/configure.cmake
+index db357641..7c7a8127 100644
+--- a/src/gui/configure.cmake
++++ b/src/gui/configure.cmake
+@@ -1074,7 +1074,7 @@ qt_feature("opengl-desktop"
+     LABEL "Desktop OpenGL"
+     AUTODETECT NOT WIN32
+     CONDITION ( WIN32 AND ( MSVC OR WrapOpenGL_FOUND ) ) OR ( NOT WATCHOS AND NOT WIN32 AND NOT WASM AND WrapOpenGL_FOUND )
+-    ENABLE INPUT_opengl STREQUAL 'desktop'
++    ENABLE INPUT_opengl STREQUAL 'desktop' OR INPUT_opengl STREQUAL 'yes'
+     DISABLE INPUT_opengl STREQUAL 'es2' OR INPUT_opengl STREQUAL 'dynamic' OR INPUT_opengl STREQUAL 'no'
+ )
+ qt_feature("opengl-dynamic"
+@@ -1082,12 +1082,6 @@ qt_feature("opengl-dynamic"
+     CONDITION WIN32
+     DISABLE INPUT_opengl STREQUAL 'no' OR INPUT_opengl STREQUAL 'desktop'
+ )
+-qt_feature("dynamicgl" PUBLIC
+-    LABEL "Dynamic OpenGL: dynamicgl"
+-    CONDITION QT_FEATURE_opengl_dynamic
+-    DISABLE INPUT_opengl STREQUAL 'no' OR INPUT_opengl STREQUAL 'desktop'
+-)
+-qt_feature_definition("opengl-dynamic" "QT_OPENGL_DYNAMIC")
+ qt_feature("opengl" PUBLIC
+     LABEL "OpenGL"
+     CONDITION QT_FEATURE_opengl_desktop OR QT_FEATURE_opengl_dynamic OR QT_FEATURE_opengles2
+@@ -1119,6 +1113,15 @@ qt_feature("egl" PUBLIC
+     CONDITION ( QT_FEATURE_opengl OR QT_FEATURE_openvg ) AND EGL_FOUND AND ( QT_FEATURE_dlopen OR NOT UNIX OR INTEGRITY OR VXWORKS)
+ )
+ qt_feature_definition("egl" "QT_NO_EGL" NEGATE VALUE "1")
++
++# On all platforms except Windows we link to EGL directly. On
++# Windows we resolve all the functions manually
++# Do NOT change it manually
++qt_feature("egl-convenience-direct-linking" PRIVATE
++    LABEL "Direct linking to EGL in EGL-convenience classes"
++    PURPOSE "Allow direct linking to EGL library in EGL-convenience classes"
++    CONDITION QT_FEATURE_egl AND NOT WIN32
++)
+ qt_feature("egl_x11" PRIVATE
+     LABEL "EGL on X11"
+     CONDITION QT_FEATURE_thread AND QT_FEATURE_egl AND TEST_egl_x11
+@@ -1758,10 +1761,20 @@ qt_configure_add_report_entry(
+     MESSAGE "No QPA platform plugin enabled! This will produce a Qt that cannot run GUI applications.  See \"Platform backends\" in the output of --help."
+     CONDITION QT_FEATURE_gui AND LINUX AND NOT ANDROID AND NOT QT_FEATURE_xcb AND NOT QT_FEATURE_eglfs AND NOT QT_FEATURE_directfb AND NOT QT_FEATURE_linuxfb
+ )
++qt_configure_add_report_entry(
++    TYPE WARNING
++    MESSAGE "-DFEATURE_opengl_desktop is deprecated on Windows, linking happens on the runtime all the time. Please use -DFEATURE_opengl=on instead."
++    CONDITION QT_FEATURE_opengl_desktop AND WIN32
++)
++qt_configure_add_report_entry(
++    TYPE WARNING
++    MESSAGE "-DFEATURE_opengl_dynamic is deprecated, linking happens on the runtime unconditonally. Please use -DFEATURE_opengl=on instead."
++    CONDITION QT_FEATURE_opengl_dynamic
++)
+ qt_configure_add_report_entry(
+     TYPE ERROR
+     MESSAGE "The OpenGL functionality tests failed! You might need to modify the OpenGL package search path by setting the OpenGL_DIR CMake variable to the OpenGL library's installation directory."
+-    CONDITION QT_FEATURE_gui AND NOT WATCHOS AND NOT VISIONOS AND ( NOT INPUT_opengl STREQUAL 'no' ) AND NOT QT_FEATURE_opengl_desktop AND NOT QT_FEATURE_opengles2 AND NOT QT_FEATURE_opengl_dynamic
++    CONDITION QT_FEATURE_gui AND NOT WATCHOS AND NOT VISIONOS AND ( NOT INPUT_opengl STREQUAL 'no' ) AND NOT QT_FEATURE_opengl
+ )
+ qt_configure_add_report_entry(
+     TYPE WARNING
+diff --git a/src/gui/kernel/qopenglcontext.cpp b/src/gui/kernel/qopenglcontext.cpp
+index c50ec76c..2d07430a 100644
+--- a/src/gui/kernel/qopenglcontext.cpp
++++ b/src/gui/kernel/qopenglcontext.cpp
+@@ -919,13 +919,11 @@ QScreen *QOpenGLContext::screen() const
+  */
+ QOpenGLContext::OpenGLModuleType QOpenGLContext::openGLModuleType()
+ {
+-#if defined(QT_OPENGL_DYNAMIC)
+-    Q_ASSERT(qGuiApp);
+-    return QGuiApplicationPrivate::instance()->platformIntegration()->openGLModuleType();
+-#elif QT_CONFIG(opengles2)
++#if QT_CONFIG(opengles2)
+     return LibGLES;
+ #else
+-    return LibGL;
++    Q_ASSERT(qGuiApp);
++    return QGuiApplicationPrivate::instance()->platformIntegration()->openGLModuleType();
+ #endif
+ }
+ 
+diff --git a/src/gui/kernel/qplatformintegration.cpp b/src/gui/kernel/qplatformintegration.cpp
+index c6244147..8685af73 100644
+--- a/src/gui/kernel/qplatformintegration.cpp
++++ b/src/gui/kernel/qplatformintegration.cpp
+@@ -583,7 +583,12 @@ void QPlatformIntegration::quit() const
+ QOpenGLContext::OpenGLModuleType QPlatformIntegration::openGLModuleType()
+ {
+     qWarning("This plugin does not support dynamic OpenGL loading!");
++
++#if QT_CONFIG(opengles2)
++    return QOpenGLContext::LibGLES;
++#else
+     return QOpenGLContext::LibGL;
++#endif
+ }
+ #endif
+ 
+diff --git a/src/gui/kernel/qplatformopenglcontext.h b/src/gui/kernel/qplatformopenglcontext.h
+index ac13c426..d12dcfbd 100644
+--- a/src/gui/kernel/qplatformopenglcontext.h
++++ b/src/gui/kernel/qplatformopenglcontext.h
+@@ -53,6 +53,7 @@ public:
+ 
+     virtual bool isSharing() const { return false; }
+     virtual bool isValid() const { return true; }
++    virtual bool isYUpInNDC() const { return true; }
+ 
+     virtual QFunctionPointer getProcAddress(const char *procName) = 0;
+ 
+diff --git a/src/gui/kernel/qsurfaceformat.cpp b/src/gui/kernel/qsurfaceformat.cpp
+index 2f46a72e..dfe116bb 100644
+--- a/src/gui/kernel/qsurfaceformat.cpp
++++ b/src/gui/kernel/qsurfaceformat.cpp
+@@ -196,6 +196,17 @@ public:
+     set, the window will be created with an sRGB-capable default
+     framebuffer. Note that some platforms may return windows with a sRGB-capable
+     default framebuffer even when not requested explicitly.
++
++    \value scRGBColorSpace When \c{EGL_EXT_gl_colorspace_scrgb_linear}
++    is supported by the platform and this value is set, the window will
++    be created with an scRGB-capable default framebuffer. Note that some
++    platforms may return windows with a scRGB-capable default framebuffer
++    even when not requested explicitly. It usually happens when the application
++    requests 16-bit surface format.
++
++    \value bt2020PQColorSpace When \c{EGL_EXT_gl_colorspace_bt2020_pq}
++    is supported by the platform and this value is set, the window will
++    be created with an bt2020 PQ default framebuffer.
+  */
+ 
+ /*!
+diff --git a/src/gui/kernel/qsurfaceformat.h b/src/gui/kernel/qsurfaceformat.h
+index a44b852f..a3f0c357 100644
+--- a/src/gui/kernel/qsurfaceformat.h
++++ b/src/gui/kernel/qsurfaceformat.h
+@@ -52,7 +52,9 @@ public:
+ #if QT_DEPRECATED_SINCE(6,0)
+     enum ColorSpace {
+         DefaultColorSpace,
+-        sRGBColorSpace
++        sRGBColorSpace,
++        scRGBColorSpace,
++        bt2020PQColorSpace
+     };
+     Q_ENUM(ColorSpace)
+ #endif
+diff --git a/src/gui/opengl/platform/egl/qeglconvenience.cpp b/src/gui/opengl/platform/egl/qeglconvenience.cpp
+index 4af50d72..0ab4cedd 100644
+--- a/src/gui/opengl/platform/egl/qeglconvenience.cpp
++++ b/src/gui/opengl/platform/egl/qeglconvenience.cpp
+@@ -3,12 +3,14 @@
+ 
+ 
+ #include <QtCore/qbytearray.h>
++#include <QtGui/qcolorspace.h>
+ #include <QtGui/qopenglcontext.h>
+ 
+ #ifdef Q_OS_LINUX
+ #include <sys/ioctl.h>
+ #include <linux/fb.h>
+ #endif
++#include <QtGui/private/qtgui-config_p.h>
+ #include <QtGui/private/qmath_p.h>
+ 
+ #include "qeglconvenience_p.h"
+@@ -19,6 +21,50 @@
+ 
+ QT_BEGIN_NAMESPACE
+ 
++QEglConfigFunctions::~QEglConfigFunctions() {}
++
++QEglConfigFunctions* q_resolveEglConfigFunctions(QEglConfigFunctions *func)
++{
++#if QT_CONFIG(egl_convenience_direct_linking)
++    if (!func) {
++        struct DirectFunctions : QEglConfigFunctions
++        {
++            EGLBoolean eglChooseConfig(EGLDisplay dpy, const EGLint *attrib_list,
++                                       EGLConfig *configs, EGLint config_size,
++                                       EGLint *num_config) override
++            {
++                return ::eglChooseConfig(dpy, attrib_list, configs, config_size, num_config);
++            }
++            EGLBoolean eglGetConfigAttrib(EGLDisplay dpy, EGLConfig config, EGLint attribute,
++                                          EGLint *value) override
++            {
++                return ::eglGetConfigAttrib(dpy, config, attribute, value);
++            }
++            const char *eglQueryString(EGLDisplay dpy, EGLint name) override
++            {
++                return ::eglQueryString(dpy, name);
++            }
++            QFunctionPointer eglGetProcAddress(const char *procname) override
++            {
++                return reinterpret_cast<QFunctionPointer>(::eglGetProcAddress(procname));
++            }
++            EGLint eglGetError() override {
++                return ::eglGetError();
++            }
++        };
++        static DirectFunctions s_func;
++        return &s_func;
++    } else {
++        return func;
++    }
++#else
++    {
++        Q_ASSERT(func);
++        return func;
++    }
++#endif
++}
++
+ QList<EGLint> q_createConfigAttributesFromFormat(const QSurfaceFormat &format)
+ {
+     int redSize     = format.redBufferSize();
+@@ -155,15 +201,19 @@ bool q_reduceConfigAttributes(QList<EGLint> *configAttributes)
+ 
+     i = configAttributes->indexOf(EGL_ALPHA_SIZE);
+     if (i >= 0) {
+-        configAttributes->remove(i,2);
+-#if defined(EGL_BIND_TO_TEXTURE_RGBA) && defined(EGL_BIND_TO_TEXTURE_RGB)
+-        i = configAttributes->indexOf(EGL_BIND_TO_TEXTURE_RGBA);
+-        if (i >= 0) {
+-            configAttributes->replace(i,EGL_BIND_TO_TEXTURE_RGB);
+-            configAttributes->replace(i+1,true);
++        if (configAttributes->at(i + 1) > 2) {
++            (*configAttributes)[i + 1] = 2;
++        } else {
++            configAttributes->remove(i,2);
++    #if defined(EGL_BIND_TO_TEXTURE_RGBA) && defined(EGL_BIND_TO_TEXTURE_RGB)
++            i = configAttributes->indexOf(EGL_BIND_TO_TEXTURE_RGBA);
++            if (i >= 0) {
++                configAttributes->replace(i,EGL_BIND_TO_TEXTURE_RGB);
++                configAttributes->replace(i+1,true);
+ 
++            }
++    #endif
+         }
+-#endif
+         return true;
+     }
+ 
+@@ -187,8 +237,9 @@ bool q_reduceConfigAttributes(QList<EGLint> *configAttributes)
+     return false;
+ }
+ 
+-QEglConfigChooser::QEglConfigChooser(EGLDisplay display)
+-    : m_display(display)
++QEglConfigChooser::QEglConfigChooser(EGLDisplay display, QEglConfigFunctions *func)
++    : m_func(q_resolveEglConfigFunctions(func))
++    , m_display(display)
+     , m_surfaceType(EGL_WINDOW_BIT)
+     , m_ignore(false)
+     , m_confAttrRed(0)
+@@ -218,7 +269,7 @@ EGLConfig QEglConfigChooser::chooseConfig()
+     case QSurfaceFormat::DefaultRenderableType: {
+ #ifndef QT_NO_OPENGL
+         // NVIDIA EGL only provides desktop GL for development purposes, and recommends against using it.
+-        const char *vendor = eglQueryString(display(), EGL_VENDOR);
++        const char *vendor = m_func->eglQueryString(display(), EGL_VENDOR);
+         if (QOpenGLContext::openGLModuleType() == QOpenGLContext::LibGL && (!vendor || !strstr(vendor, "NVIDIA")))
+             configureAttributes.append(EGL_OPENGL_BIT);
+         else
+@@ -241,18 +292,22 @@ EGLConfig QEglConfigChooser::chooseConfig()
+         break;
+     }
+     if (needsES2Plus) {
+-        if (m_format.majorVersion() >= 3 && q_hasEglExtension(display(), "EGL_KHR_create_context"))
++        if (m_format.majorVersion() >= 3 && q_hasEglExtension(display(), "EGL_KHR_create_context", m_func))
+             configureAttributes.append(EGL_OPENGL_ES3_BIT_KHR);
+         else
+             configureAttributes.append(EGL_OPENGL_ES2_BIT);
+     }
++    if (m_format.colorSpace() == QColorSpace::SRgbLinear) {
++        configureAttributes.emplace_back(EGL_COLOR_COMPONENT_TYPE_EXT);
++        configureAttributes.emplace_back(EGL_COLOR_COMPONENT_TYPE_FLOAT_EXT);
++    }
+     configureAttributes.append(EGL_NONE);
+ 
+     EGLConfig cfg = nullptr;
+     do {
+         // Get the number of matching configurations for this set of properties.
+         EGLint matching = 0;
+-        if (!eglChooseConfig(display(), configureAttributes.constData(), nullptr, 0, &matching) || !matching)
++        if (!m_func->eglChooseConfig(display(), configureAttributes.constData(), nullptr, 0, &matching) || !matching)
+             continue;
+ 
+         // Fetch all of the matching configurations and find the
+@@ -267,8 +322,8 @@ EGLConfig QEglConfigChooser::chooseConfig()
+         m_confAttrAlpha = i == -1 ? 0 : configureAttributes.at(i+1);
+ 
+         QList<EGLConfig> configs(matching);
+-        eglChooseConfig(display(), configureAttributes.constData(), configs.data(),
+-                        EGLint(configs.size()), &matching);
++        m_func->eglChooseConfig(display(), configureAttributes.constData(), configs.data(),
++                                EGLint(configs.size()), &matching);
+         if (!cfg && matching > 0)
+             cfg = configs.first();
+ 
+@@ -304,21 +359,21 @@ bool QEglConfigChooser::filterConfig(EGLConfig config) const
+ 
+     // Compare only if a size was given. Otherwise just accept.
+     if (m_confAttrRed)
+-        eglGetConfigAttrib(display(), config, EGL_RED_SIZE, &red);
++        m_func->eglGetConfigAttrib(display(), config, EGL_RED_SIZE, &red);
+     if (m_confAttrGreen)
+-        eglGetConfigAttrib(display(), config, EGL_GREEN_SIZE, &green);
++        m_func->eglGetConfigAttrib(display(), config, EGL_GREEN_SIZE, &green);
+     if (m_confAttrBlue)
+-        eglGetConfigAttrib(display(), config, EGL_BLUE_SIZE, &blue);
++        m_func->eglGetConfigAttrib(display(), config, EGL_BLUE_SIZE, &blue);
+     if (m_confAttrAlpha)
+-        eglGetConfigAttrib(display(), config, EGL_ALPHA_SIZE, &alpha);
++        m_func->eglGetConfigAttrib(display(), config, EGL_ALPHA_SIZE, &alpha);
+ 
+     return red == m_confAttrRed && green == m_confAttrGreen
+            && blue == m_confAttrBlue && alpha == m_confAttrAlpha;
+ }
+ 
+-EGLConfig q_configFromGLFormat(EGLDisplay display, const QSurfaceFormat &format, bool highestPixelFormat, int surfaceType)
++EGLConfig q_configFromGLFormat(EGLDisplay display, const QSurfaceFormat &format, bool highestPixelFormat, int surfaceType, QEglConfigFunctions *func)
+ {
+-    QEglConfigChooser chooser(display);
++    QEglConfigChooser chooser(display, func);
+     chooser.setSurfaceFormat(format);
+     chooser.setSurfaceType(surfaceType);
+     chooser.setIgnoreColorChannels(highestPixelFormat);
+@@ -326,7 +381,8 @@ EGLConfig q_configFromGLFormat(EGLDisplay display, const QSurfaceFormat &format,
+     return chooser.chooseConfig();
+ }
+ 
+-QSurfaceFormat q_glFormatFromConfig(EGLDisplay display, const EGLConfig config, const QSurfaceFormat &referenceFormat)
++QSurfaceFormat q_glFormatFromConfig(EGLDisplay display, const EGLConfig config, const QSurfaceFormat &referenceFormat,
++                                    QEglConfigFunctions *func)
+ {
+     QSurfaceFormat format;
+     EGLint redSize     = 0;
+@@ -338,14 +394,14 @@ QSurfaceFormat q_glFormatFromConfig(EGLDisplay display, const EGLConfig config,
+     EGLint sampleCount = 0;
+     EGLint renderableType = 0;
+ 
+-    eglGetConfigAttrib(display, config, EGL_RED_SIZE,     &redSize);
+-    eglGetConfigAttrib(display, config, EGL_GREEN_SIZE,   &greenSize);
+-    eglGetConfigAttrib(display, config, EGL_BLUE_SIZE,    &blueSize);
+-    eglGetConfigAttrib(display, config, EGL_ALPHA_SIZE,   &alphaSize);
+-    eglGetConfigAttrib(display, config, EGL_DEPTH_SIZE,   &depthSize);
+-    eglGetConfigAttrib(display, config, EGL_STENCIL_SIZE, &stencilSize);
+-    eglGetConfigAttrib(display, config, EGL_SAMPLES,      &sampleCount);
+-    eglGetConfigAttrib(display, config, EGL_RENDERABLE_TYPE, &renderableType);
++    func->eglGetConfigAttrib(display, config, EGL_RED_SIZE,     &redSize);
++    func->eglGetConfigAttrib(display, config, EGL_GREEN_SIZE,   &greenSize);
++    func->eglGetConfigAttrib(display, config, EGL_BLUE_SIZE,    &blueSize);
++    func->eglGetConfigAttrib(display, config, EGL_ALPHA_SIZE,   &alphaSize);
++    func->eglGetConfigAttrib(display, config, EGL_DEPTH_SIZE,   &depthSize);
++    func->eglGetConfigAttrib(display, config, EGL_STENCIL_SIZE, &stencilSize);
++    func->eglGetConfigAttrib(display, config, EGL_SAMPLES,      &sampleCount);
++    func->eglGetConfigAttrib(display, config, EGL_RENDERABLE_TYPE, &renderableType);
+ 
+     if (referenceFormat.renderableType() == QSurfaceFormat::OpenVG && (renderableType & EGL_OPENVG_BIT))
+         format.setRenderableType(QSurfaceFormat::OpenVG);
+@@ -356,7 +412,7 @@ QSurfaceFormat q_glFormatFromConfig(EGLDisplay display, const EGLConfig config,
+     else if (referenceFormat.renderableType() == QSurfaceFormat::DefaultRenderableType
+ #ifndef QT_NO_OPENGL
+              && QOpenGLContext::openGLModuleType() == QOpenGLContext::LibGL
+-             && !strstr(eglQueryString(display, EGL_VENDOR), "NVIDIA")
++             && !strstr(func->eglQueryString(display, EGL_VENDOR), "NVIDIA")
+ #endif
+              && (renderableType & EGL_OPENGL_BIT))
+         format.setRenderableType(QSurfaceFormat::OpenGL);
+@@ -372,21 +428,22 @@ QSurfaceFormat q_glFormatFromConfig(EGLDisplay display, const EGLConfig config,
+     format.setStencilBufferSize(stencilSize);
+     format.setSamples(sampleCount);
+     format.setStereo(false);         // EGL doesn't support stereo buffers
++    format.setColorSpace(referenceFormat.colorSpace());
+     format.setSwapInterval(referenceFormat.swapInterval());
+ 
+     // Clear the EGL error state because some of the above may
+     // have errored out because the attribute is not applicable
+     // to the surface type.  Such errors don't matter.
+-    eglGetError();
++    func->eglGetError();
+ 
+     return format;
+ }
+ 
+-bool q_hasEglExtension(EGLDisplay display, const char* extensionName)
++bool q_hasEglExtension(EGLDisplay display, const char* extensionName, QEglConfigFunctions *func)
+ {
+     QList<QByteArray> extensions =
+         QByteArray(reinterpret_cast<const char *>
+-            (eglQueryString(display, EGL_EXTENSIONS))).split(' ');
++            (func->eglQueryString(display, EGL_EXTENSIONS))).split(' ');
+     return extensions.contains(extensionName);
+ }
+ 
+@@ -421,12 +478,12 @@ static struct AttrInfo attrs[] = {
+     {EGL_MAX_SWAP_INTERVAL, "EGL_MAX_SWAP_INTERVAL"},
+     {-1, nullptr}};
+ 
+-void q_printEglConfig(EGLDisplay display, EGLConfig config)
++void q_printEglConfig(EGLDisplay display, EGLConfig config, QEglConfigFunctions *func)
+ {
+     EGLint index;
+     for (index = 0; attrs[index].attr != -1; ++index) {
+         EGLint value;
+-        if (eglGetConfigAttrib(display, config, attrs[index].attr, &value)) {
++        if (func->eglGetConfigAttrib(display, config, attrs[index].attr, &value)) {
+             qDebug("\t%s: %d", attrs[index].name, (int)value);
+         }
+     }
+diff --git a/src/gui/opengl/platform/egl/qeglconvenience_p.h b/src/gui/opengl/platform/egl/qeglconvenience_p.h
+index d4a250c9..a68cd02b 100644
+--- a/src/gui/opengl/platform/egl/qeglconvenience_p.h
++++ b/src/gui/opengl/platform/egl/qeglconvenience_p.h
+@@ -21,9 +21,24 @@
+ 
+ #include <QtGui/private/qt_egl_p.h>
+ 
+-
+ QT_BEGIN_NAMESPACE
+ 
++class Q_GUI_EXPORT QEglConfigFunctions
++{
++public:
++    virtual ~QEglConfigFunctions();
++    virtual EGLBoolean eglChooseConfig(EGLDisplay dpy, const EGLint *attrib_list,
++                                       EGLConfig *configs, EGLint config_size,
++                                       EGLint *num_config) = 0;
++    virtual EGLBoolean eglGetConfigAttrib(EGLDisplay dpy, EGLConfig config, EGLint attribute,
++                                          EGLint *value) = 0;
++    virtual const char * eglQueryString(EGLDisplay dpy, EGLint name) = 0;
++    virtual QFunctionPointer eglGetProcAddress(const char *procname) = 0;
++    virtual EGLint eglGetError() = 0;
++};
++
++Q_GUI_EXPORT QEglConfigFunctions* q_resolveEglConfigFunctions(QEglConfigFunctions *func);
++
+ Q_GUI_EXPORT QList<EGLint> q_createConfigAttributesFromFormat(const QSurfaceFormat &format);
+ 
+ Q_GUI_EXPORT bool q_reduceConfigAttributes(QList<EGLint> *configAttributes);
+@@ -31,14 +46,16 @@ Q_GUI_EXPORT bool q_reduceConfigAttributes(QList<EGLint> *configAttributes);
+ Q_GUI_EXPORT EGLConfig q_configFromGLFormat(EGLDisplay display,
+                                                const QSurfaceFormat &format,
+                                                bool highestPixelFormat = false,
+-                                               int surfaceType = EGL_WINDOW_BIT);
++                                               int surfaceType = EGL_WINDOW_BIT,
++                                               QEglConfigFunctions *func = nullptr);
+ 
+ Q_GUI_EXPORT QSurfaceFormat q_glFormatFromConfig(EGLDisplay display, const EGLConfig config,
+-                                                    const QSurfaceFormat &referenceFormat = {});
++                                                    const QSurfaceFormat &referenceFormat = {},
++                                                    QEglConfigFunctions *func = nullptr);
+ 
+-Q_GUI_EXPORT bool q_hasEglExtension(EGLDisplay display,const char* extensionName);
++Q_GUI_EXPORT bool q_hasEglExtension(EGLDisplay display,const char* extensionName, QEglConfigFunctions *func = nullptr);
+ 
+-Q_GUI_EXPORT void q_printEglConfig(EGLDisplay display, EGLConfig config);
++Q_GUI_EXPORT void q_printEglConfig(EGLDisplay display, EGLConfig config, QEglConfigFunctions *func = nullptr);
+ 
+ #ifdef Q_OS_UNIX
+ Q_GUI_EXPORT QSizeF q_physicalScreenSizeFromFb(int framebufferDevice,
+@@ -55,7 +72,7 @@ Q_GUI_EXPORT  qreal q_refreshRateFromFb(int framebufferDevice);
+ class Q_GUI_EXPORT QEglConfigChooser
+ {
+ public:
+-    QEglConfigChooser(EGLDisplay display);
++    QEglConfigChooser(EGLDisplay display, QEglConfigFunctions *func = nullptr);
+     virtual ~QEglConfigChooser();
+ 
+     EGLDisplay display() const { return m_display; }
+@@ -74,6 +91,8 @@ public:
+ protected:
+     virtual bool filterConfig(EGLConfig config) const;
+ 
++    QEglConfigFunctions *m_func = nullptr;
++
+     QSurfaceFormat m_format;
+     EGLDisplay m_display;
+     EGLint m_surfaceType;
+diff --git a/src/gui/opengl/platform/egl/qeglnativeinterfacecommon.cpp b/src/gui/opengl/platform/egl/qeglnativeinterfacecommon.cpp
+new file mode 100644
+index 00000000..dba82e8a
+--- /dev/null
++++ b/src/gui/opengl/platform/egl/qeglnativeinterfacecommon.cpp
+@@ -0,0 +1,87 @@
++// Copyright (C) 2020 The Qt Company Ltd.
++// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
++
++#include <QtGui/private/qtguiglobal_p.h>
++
++#if QT_CONFIG(opengl)
++#include <QtGui/private/qguiapplication_p.h>
++#include <qpa/qplatformopenglcontext.h>
++#include <qpa/qplatformintegration.h>
++#endif
++
++/*!
++    \class QNativeInterface::QEGLContext
++    \since 6.0
++    \brief Native interface to an EGL context.
++
++    Accessed through QOpenGLContext::nativeInterface().
++
++    \inmodule QtGui
++    \inheaderfile QOpenGLContext
++    \ingroup native-interfaces
++    \ingroup native-interfaces-qopenglcontext
++*/
++
++/*!
++    \fn QOpenGLContext *QNativeInterface::QEGLContext::fromNative(EGLContext context, EGLDisplay display, QOpenGLContext *shareContext = nullptr)
++
++    \brief Adopts an EGLContext \a context.
++
++    The same \c EGLDisplay passed to \c eglCreateContext must be passed as the \a display argument.
++
++    Ownership of the created QOpenGLContext \a shareContext is transferred
++    to the caller.
++*/
++
++/*!
++    \fn EGLContext QNativeInterface::QEGLContext::nativeContext() const
++
++    \return the underlying EGLContext.
++*/
++
++/*!
++    \fn EGLConfig QNativeInterface::QEGLContext::config() const
++    \since 6.3
++    \return the EGLConfig associated with the underlying EGLContext.
++*/
++
++/*!
++    \fn EGLDisplay QNativeInterface::QEGLContext::display() const
++    \since 6.3
++    \return the EGLDisplay associated with the underlying EGLContext.
++*/
++
++
++/*!
++    \fn void QNativeInterface::QEGLContext::invalidateContext()
++    \since 6.5
++    \brief Marks the context as invalid
++
++    If this context is used by the Qt Quick scenegraph, this will trigger the
++    SceneGraph to destroy this context and create a new one.
++
++    Similarly to QPlatformWindow::invalidateSurface(),
++    this function can only be expected to have an effect on certain platforms,
++    such as eglfs.
++
++    \sa QOpenGLContext::isValid(), QPlatformWindow::invalidateSurface()
++*/
++
++QT_BEGIN_NAMESPACE
++
++#ifndef QT_NO_OPENGL
++
++using namespace QNativeInterface::Private;
++
++QT_DEFINE_NATIVE_INTERFACE(QEGLContext);
++QT_DEFINE_PRIVATE_NATIVE_INTERFACE(QEGLIntegration);
++
++QOpenGLContext *QNativeInterface::QEGLContext::fromNative(EGLContext context, EGLDisplay display, QOpenGLContext *shareContext)
++{
++    return QGuiApplicationPrivate::platformIntegration()->call<
++        &QEGLIntegration::createOpenGLContext>(context, display, shareContext);
++}
++
++#endif // QT_NO_OPENGL
++
++QT_END_NAMESPACE
+\ No newline at end of file
+diff --git a/src/gui/opengl/platform/egl/qeglplatformcontext.cpp b/src/gui/opengl/platform/egl/qeglplatformcontext.cpp
+index d6493477..71f5bc05 100644
+--- a/src/gui/opengl/platform/egl/qeglplatformcontext.cpp
++++ b/src/gui/opengl/platform/egl/qeglplatformcontext.cpp
+@@ -581,7 +581,7 @@ QFunctionPointer QEGLPlatformContext::getProcAddress(const char *procName)
+ #if QT_CONFIG(dlopen)
+     if (!proc)
+         proc = (QFunctionPointer) dlsym(RTLD_DEFAULT, procName);
+-#elif !defined(QT_OPENGL_DYNAMIC)
++#elif QT_CONFIG(opengles2)
+     // On systems without KHR_get_all_proc_addresses and without
+     // dynamic linking there still has to be a way to access the
+     // standard GLES functions. QOpenGL(Extra)Functions never makes
+diff --git a/src/gui/painting/qbackingstoredefaultcompositor.cpp b/src/gui/painting/qbackingstoredefaultcompositor.cpp
+index 293cfc6b..07fe90d3 100644
+--- a/src/gui/painting/qbackingstoredefaultcompositor.cpp
++++ b/src/gui/painting/qbackingstoredefaultcompositor.cpp
+@@ -468,6 +468,63 @@ void QBackingStoreDefaultCompositor::ensureResources(QRhiResourceUpdateBatch *re
+         m_psPremulBlend.reset(createGraphicsPipeline(m_rhi, srb, rpDesc, PipelineBlend::PremulAlpha));
+ }
+ 
++QPlatformBackingStore::FlushResult
++QBackingStoreDefaultCompositor::clearSurface(QRhi *rhi,
++                                             QRhiSwapChain *swapchain, QWindow *window,
++                                             const QColor &clearColor)
++{
++    if (!rhi)
++        return QPlatformBackingStore::FlushFailed;
++
++    if (!m_rhi) {
++        m_rhi = rhi;
++    } else if (m_rhi != rhi) {
++        qWarning("QBackingStoreDefaultCompositor: the QRhi has changed unexpectedly, this should not happen");
++        return QPlatformBackingStore::FlushFailed;
++    }
++
++    QWindowPrivate::get(window)->lastComposeTime.start();
++
++    if (swapchain->currentPixelSize() != swapchain->surfacePixelSize())
++        swapchain->createOrResize();
++
++    // Start recording a new frame.
++    QRhi::FrameOpResult frameResult = rhi->beginFrame(swapchain);
++    if (frameResult == QRhi::FrameOpSwapChainOutOfDate) {
++        if (!swapchain->createOrResize())
++            return QPlatformBackingStore::FlushFailed;
++        frameResult = rhi->beginFrame(swapchain);
++    }
++    if (frameResult == QRhi::FrameOpDeviceLost)
++        return QPlatformBackingStore::FlushFailedDueToLostDevice;
++    if (frameResult != QRhi::FrameOpSuccess)
++        return QPlatformBackingStore::FlushFailed;
++
++    // Record the render pass (with committing the resource updates).
++    QRhiCommandBuffer *cb = swapchain->currentFrameCommandBuffer();
++
++    auto render = [&](std::optional<QRhiSwapChain::StereoTargetBuffer> buffer = std::nullopt) {
++        QRhiRenderTarget* target = nullptr;
++        if (buffer.has_value())
++            target = swapchain->currentFrameRenderTarget(buffer.value());
++        else
++            target = swapchain->currentFrameRenderTarget();
++
++        cb->beginPass(target, clearColor, { 1.0f, 0 });
++        cb->endPass();
++    };
++
++    if (swapchain->window()->format().stereo()) {
++        render(QRhiSwapChain::LeftBuffer);
++        render(QRhiSwapChain::RightBuffer);
++    } else
++        render();
++
++    rhi->endFrame(swapchain);
++
++    return QPlatformBackingStore::FlushSuccess;
++}
++
+ QPlatformBackingStore::FlushResult QBackingStoreDefaultCompositor::flush(QPlatformBackingStore *backingStore,
+                                                                          QRhi *rhi,
+                                                                          QRhiSwapChain *swapchain,
+diff --git a/src/gui/painting/qbackingstoredefaultcompositor_p.h b/src/gui/painting/qbackingstoredefaultcompositor_p.h
+index cdc9d098..a777fe45 100644
+--- a/src/gui/painting/qbackingstoredefaultcompositor_p.h
++++ b/src/gui/painting/qbackingstoredefaultcompositor_p.h
+@@ -44,6 +44,11 @@ public:
+                                              bool translucentBackground,
+                                              qreal sourceTransformFactor);
+ 
++    QPlatformBackingStore::FlushResult clearSurface(QRhi *rhi,
++                                                    QRhiSwapChain *swapchain,
++                                                    QWindow *window,
++                                                    const QColor &clearColor);
++
+ private:
+     enum UpdateUniformOption {
+         NeedsRedBlueSwap = 1 << 0,
+diff --git a/src/gui/painting/qplatformbackingstore.cpp b/src/gui/painting/qplatformbackingstore.cpp
+index 2acc5ef7..d06bddd5 100644
+--- a/src/gui/painting/qplatformbackingstore.cpp
++++ b/src/gui/painting/qplatformbackingstore.cpp
+@@ -224,6 +224,16 @@ QPlatformBackingStore::FlushResult QPlatformBackingStore::rhiFlush(QWindow *wind
+         translucentBackground, sourceTransformFactor);
+ }
+ 
++QPlatformBackingStore::FlushResult QPlatformBackingStore::rhiClear(QWindow *window, const QColor &clearColor)
++{
++    auto &surfaceSupport = d_ptr->surfaceSupport[window->surfaceType()];
++    return surfaceSupport.compositor.clearSurface(
++        surfaceSupport.rhiSupport.rhi(),
++        surfaceSupport.rhiSupport.swapChainForWindow(window),
++        window,
++        clearColor);
++}
++
+ /*!
+   Implemented in subclasses to return the content of the backingstore as a QImage.
+ 
+diff --git a/src/gui/painting/qplatformbackingstore.h b/src/gui/painting/qplatformbackingstore.h
+index 86035b98..e2246969 100644
+--- a/src/gui/painting/qplatformbackingstore.h
++++ b/src/gui/painting/qplatformbackingstore.h
+@@ -154,6 +154,9 @@ public:
+                                  bool translucentBackground,
+                                  qreal sourceTransformFactor = 0);
+ 
++    virtual FlushResult rhiClear(QWindow *window,
++                                 const QColor &clearColor);
++
+     virtual QImage toImage() const;
+ 
+     enum TextureFlag {
+diff --git a/src/gui/platform/unix/qunixnativeinterface.cpp b/src/gui/platform/unix/qunixnativeinterface.cpp
+index ec8efda2..d3c29786 100644
+--- a/src/gui/platform/unix/qunixnativeinterface.cpp
++++ b/src/gui/platform/unix/qunixnativeinterface.cpp
+@@ -80,76 +80,6 @@ QOpenGLContext *QNativeInterface::QGLXContext::fromNative(GLXContext visualBased
+ }
+ #endif // QT_CONFIG(xcb_glx_plugin)
+ 
+-#if QT_CONFIG(egl)
+-
+-/*!
+-    \class QNativeInterface::QEGLContext
+-    \since 6.0
+-    \brief Native interface to an EGL context.
+-
+-    Accessed through QOpenGLContext::nativeInterface().
+-
+-    \inmodule QtGui
+-    \inheaderfile QOpenGLContext
+-    \ingroup native-interfaces
+-    \ingroup native-interfaces-qopenglcontext
+-*/
+-
+-/*!
+-    \fn QOpenGLContext *QNativeInterface::QEGLContext::fromNative(EGLContext context, EGLDisplay display, QOpenGLContext *shareContext = nullptr)
+-
+-    \brief Adopts an EGLContext \a context.
+-
+-    The same \c EGLDisplay passed to \c eglCreateContext must be passed as the \a display argument.
+-
+-    Ownership of the created QOpenGLContext \a shareContext is transferred
+-    to the caller.
+-*/
+-
+-/*!
+-    \fn EGLContext QNativeInterface::QEGLContext::nativeContext() const
+-
+-    \return the underlying EGLContext.
+-*/
+-
+-/*!
+-    \fn EGLConfig QNativeInterface::QEGLContext::config() const
+-    \since 6.3
+-    \return the EGLConfig associated with the underlying EGLContext.
+-*/
+-
+-/*!
+-    \fn EGLDisplay QNativeInterface::QEGLContext::display() const
+-    \since 6.3
+-    \return the EGLDisplay associated with the underlying EGLContext.
+-*/
+-
+-
+-/*!
+-    \fn void QNativeInterface::QEGLContext::invalidateContext()
+-    \since 6.5
+-    \brief Marks the context as invalid
+-
+-    If this context is used by the Qt Quick scenegraph, this will trigger the
+-    SceneGraph to destroy this context and create a new one.
+-
+-    Similarly to QPlatformWindow::invalidateSurface(),
+-    this function can only be expected to have an effect on certain platforms,
+-    such as eglfs.
+-
+-    \sa QOpenGLContext::isValid(), QPlatformWindow::invalidateSurface()
+-*/
+-
+-QT_DEFINE_NATIVE_INTERFACE(QEGLContext);
+-QT_DEFINE_PRIVATE_NATIVE_INTERFACE(QEGLIntegration);
+-
+-QOpenGLContext *QNativeInterface::QEGLContext::fromNative(EGLContext context, EGLDisplay display, QOpenGLContext *shareContext)
+-{
+-    return QGuiApplicationPrivate::platformIntegration()->call<
+-        &QEGLIntegration::createOpenGLContext>(context, display, shareContext);
+-}
+-#endif // QT_CONFIG(egl)
+-
+ #endif // QT_NO_OPENGL
+ 
+ #if QT_CONFIG(xcb)
+diff --git a/src/gui/rhi/qrhigles2.cpp b/src/gui/rhi/qrhigles2.cpp
+index 640be922..8cb46191 100644
+--- a/src/gui/rhi/qrhigles2.cpp
++++ b/src/gui/rhi/qrhigles2.cpp
+@@ -1190,6 +1190,8 @@ bool QRhiGles2::create(QRhi::Flags flags)
+         caps.glesMultiviewMultisampleRenderToTexture = false;
+     }
+ 
++    caps.yUpInNDC = ctx->handle()->isYUpInNDC();
++
+     caps.unpackRowLength = !caps.gles || caps.ctxMajor >= 3;
+ 
+     if (caps.gles)
+@@ -1315,7 +1317,7 @@ bool QRhiGles2::isYUpInFramebuffer() const
+ 
+ bool QRhiGles2::isYUpInNDC() const
+ {
+-    return true;
++    return caps.yUpInNDC;
+ }
+ 
+ bool QRhiGles2::isClipDepthZeroToOne() const
+diff --git a/src/gui/rhi/qrhigles2_p.h b/src/gui/rhi/qrhigles2_p.h
+index 66f30951..69835c9a 100644
+--- a/src/gui/rhi/qrhigles2_p.h
++++ b/src/gui/rhi/qrhigles2_p.h
+@@ -1034,7 +1034,8 @@ public:
+               glesMultisampleRenderToTexture(false),
+               glesMultiviewMultisampleRenderToTexture(false),
+               unpackRowLength(false),
+-              perRenderTargetBlending(false)
++              perRenderTargetBlending(false),
++              yUpInNDC(true)
+         { }
+         int ctxMajor;
+         int ctxMinor;
+@@ -1098,6 +1099,7 @@ public:
+         uint unpackRowLength : 1;
+         uint perRenderTargetBlending : 1;
+         uint sampleVariables : 1;
++        uint yUpInNDC : 1;
+         uint imageLoadStore : 1;
+     } caps;
+     QGles2SwapChain *currentSwapChain = nullptr;
+diff --git a/src/opengl/CMakeLists.txt b/src/opengl/CMakeLists.txt
+index de034def..bb100da0 100644
+--- a/src/opengl/CMakeLists.txt
++++ b/src/opengl/CMakeLists.txt
+@@ -112,7 +112,7 @@ if(QT_FEATURE_vulkan)
+         OpenGL WrapVulkanHeaders::WrapVulkanHeaders)
+ endif()
+ 
+-qt_internal_extend_target(OpenGL CONDITION QT_FEATURE_egl
++qt_internal_extend_target(OpenGL CONDITION QT_FEATURE_eglfs
+     SOURCES
+         qopenglcompositor.cpp qopenglcompositor_p.h
+         qopenglcompositorbackingstore.cpp qopenglcompositorbackingstore_p.h
+diff --git a/src/opengl/qopenglpaintengine.cpp b/src/opengl/qopenglpaintengine.cpp
+index ad1249b0..b44149df 100644
+--- a/src/opengl/qopenglpaintengine.cpp
++++ b/src/opengl/qopenglpaintengine.cpp
+@@ -49,6 +49,10 @@
+ #include <private/qopengl2pexvertexarray_p.h>
+ #include <private/qopengltextureglyphcache_p.h>
+ 
++#if !QT_CONFIG(opengles2)
++#include <QOpenGLVersionFunctionsFactory>
++#endif
++
+ #include <QDebug>
+ 
+ #include <qtopengl_tracepoints_p.h>
+@@ -676,13 +680,14 @@ void QOpenGL2PaintEngineEx::beginNativePainting()
+     for (int i = 0; i < QT_GL_VERTEX_ARRAY_TRACKED_COUNT; ++i)
+         d->funcs.glDisableVertexAttribArray(i);
+ 
+-#if !QT_CONFIG(opengles2) && !defined(QT_OPENGL_DYNAMIC)
++#if !QT_CONFIG(opengles2)
+     Q_ASSERT(QOpenGLContext::currentContext());
+     const QOpenGLContext *ctx = d->ctx;
+     const QSurfaceFormat &fmt = d->device->context()->format();
+-    if (fmt.majorVersion() < 3 || (fmt.majorVersion() == 3 && fmt.minorVersion() < 1)
+-        || (fmt.majorVersion() == 3 && fmt.minorVersion() == 1 && ctx->hasExtension(QByteArrayLiteral("GL_ARB_compatibility")))
+-        || fmt.profile() == QSurfaceFormat::CompatibilityProfile)
++    if (!ctx->isOpenGLES() &&
++        (fmt.majorVersion() < 3 || (fmt.majorVersion() == 3 && fmt.minorVersion() < 1)
++         || (fmt.majorVersion() == 3 && fmt.minorVersion() == 1 && ctx->hasExtension(QByteArrayLiteral("GL_ARB_compatibility")))
++         || fmt.profile() == QSurfaceFormat::CompatibilityProfile))
+     {
+         // be nice to people who mix OpenGL 1.x code with QPainter commands
+         // by setting modelview and projection matrices to mirror the GL 1
+@@ -699,12 +704,20 @@ void QOpenGL2PaintEngineEx::beginNativePainting()
+ 
+         const QSize sz = d->device->size();
+ 
+-        glMatrixMode(GL_PROJECTION);
+-        glLoadIdentity();
+-        glOrtho(0, sz.width(), sz.height(), 0, -999999, 999999);
++        /**
++         * Don't cache legacy functions since they are already cached at the level
++         * of QOpenGLVersionFunctionsFactory. That is also the reason why we shouldn't
++         * delete this object.
++         */
++        QOpenGLFunctions_2_1 *legacyFuncs = QOpenGLVersionFunctionsFactory::get<QOpenGLFunctions_2_1>();
++        Q_ASSERT(legacyFuncs);
++
++        legacyFuncs->glMatrixMode(GL_PROJECTION);
++        legacyFuncs->glLoadIdentity();
++        legacyFuncs->glOrtho(0, sz.width(), sz.height(), 0, -999999, 999999);
+ 
+-        glMatrixMode(GL_MODELVIEW);
+-        glLoadMatrixf(&mv_matrix[0][0]);
++        legacyFuncs->glMatrixMode(GL_MODELVIEW);
++        legacyFuncs->glLoadMatrixf(&mv_matrix[0][0]);
+     }
+ #endif // !QT_CONFIG(opengles2)
+ 
+diff --git a/src/opengl/qopenglpaintengine_p.h b/src/opengl/qopenglpaintengine_p.h
+index 31eb111f..6438eecf 100644
+--- a/src/opengl/qopenglpaintengine_p.h
++++ b/src/opengl/qopenglpaintengine_p.h
+@@ -26,6 +26,10 @@
+ 
+ #include <private/qopenglextensions_p.h>
+ 
++#if !QT_CONFIG(opengles2)
++#include <QOpenGLFunctions_2_1>
++#endif
++
+ #include <QOpenGLVertexArrayObject>
+ #include <QOpenGLBuffer>
+ 
+diff --git a/src/plugins/platforms/direct2d/CMakeLists.txt b/src/plugins/platforms/direct2d/CMakeLists.txt
+index 2fc5a0dc..2a5d2947 100644
+--- a/src/plugins/platforms/direct2d/CMakeLists.txt
++++ b/src/plugins/platforms/direct2d/CMakeLists.txt
+@@ -102,11 +102,6 @@ qt_internal_add_resource(QWindowsDirect2DIntegrationPlugin "openglblacklists"
+ ## Scopes:
+ #####################################################################
+ 
+-qt_internal_extend_target(QWindowsDirect2DIntegrationPlugin CONDITION QT_FEATURE_opengl AND NOT QT_FEATURE_dynamicgl
+-    LIBRARIES
+-        opengl32
+-)
+-
+ qt_internal_extend_target(QWindowsDirect2DIntegrationPlugin CONDITION MINGW
+     LIBRARIES
+         uuid
+@@ -120,6 +115,13 @@ qt_internal_extend_target(QWindowsDirect2DIntegrationPlugin CONDITION QT_FEATURE
+         ../windows/qwindowsopenglcontext.h
+ )
+ 
++qt_internal_extend_target(QWindowsDirect2DIntegrationPlugin CONDITION QT_FEATURE_egl
++    SOURCES
++        ../windows/qwindowseglcontext.cpp ../windows/qwindowseglcontext.h
++    LIBRARIES
++        EGL::EGL
++)
++
+ qt_internal_extend_target(QWindowsDirect2DIntegrationPlugin CONDITION QT_FEATURE_systemtrayicon
+     SOURCES
+         ../windows/qwindowssystemtrayicon.cpp ../windows/qwindowssystemtrayicon.h
+diff --git a/src/plugins/platforms/windows/CMakeLists.txt b/src/plugins/platforms/windows/CMakeLists.txt
+index c0520e76..a7bb724b 100644
+--- a/src/plugins/platforms/windows/CMakeLists.txt
++++ b/src/plugins/platforms/windows/CMakeLists.txt
+@@ -97,9 +97,11 @@ qt_internal_extend_target(QWindowsIntegrationPlugin CONDITION QT_FEATURE_opengl
+         Qt::OpenGLPrivate
+ )
+ 
+-qt_internal_extend_target(QWindowsIntegrationPlugin CONDITION QT_FEATURE_opengl AND NOT QT_FEATURE_dynamicgl
++qt_internal_extend_target(QWindowsIntegrationPlugin CONDITION QT_FEATURE_egl
++    SOURCES
++        qwindowseglcontext.cpp qwindowseglcontext.h
+     LIBRARIES
+-        opengl32
++        EGL::EGL
+ )
+ 
+ qt_internal_extend_target(QWindowsIntegrationPlugin CONDITION MINGW
+diff --git a/src/plugins/platforms/windows/qwindowseglcontext.cpp b/src/plugins/platforms/windows/qwindowseglcontext.cpp
+new file mode 100644
+index 00000000..35b2466a
+--- /dev/null
++++ b/src/plugins/platforms/windows/qwindowseglcontext.cpp
+@@ -0,0 +1,750 @@
++// Copyright (C) 2016 The Qt Company Ltd.
++// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
++
++#include "qwindowseglcontext.h"
++#include "qwindowscontext.h"
++#include "qwindowswindow.h"
++
++#include <QtCore/qdebug.h>
++#include <QtGui/qopenglcontext.h>
++
++#include <EGL/eglext.h>
++#include <VersionHelpers.h>
++
++#include <string_view>
++
++using namespace Qt::Literals::StringLiterals;
++using namespace std::string_view_literals;
++
++#include <QtGui/private/qeglconvenience_p.h>
++
++QT_BEGIN_NAMESPACE
++
++void APIENTRY angleDebugMessagesCallback(EGLenum error, const char *command, EGLint messageType,
++                                         EGLLabelKHR threadLabel, EGLLabelKHR objectLabel,
++                                         const char *message)
++{
++    Q_UNUSED(threadLabel)
++    Q_UNUSED(objectLabel)
++
++    const QLatin1StringView severity([=] () {
++        if (messageType == EGL_DEBUG_MSG_CRITICAL_KHR) {
++            return "critical";
++        } else if (messageType == EGL_DEBUG_MSG_ERROR_KHR) {
++            return "error";
++        } else if (messageType == EGL_DEBUG_MSG_WARN_KHR) {
++            return "warn";
++        } else if (messageType == EGL_DEBUG_MSG_INFO_KHR) {
++            return "info";
++        } else {
++            return "unknown";
++        }
++    }());
++
++    qDebug().noquote().nospace() << "ANGLE (" << severity << ") " << command << ": \"" << message
++                                 << "\" (code: " << Qt::hex << Qt::showbase << error << ")";
++}
++
++struct IndirectFunctions : QEglConfigFunctions
++{
++    IndirectFunctions(QWindowsLibEGL *libEGLArg) : libEGL(libEGLArg) {}
++    QWindowsLibEGL *libEGL;
++    EGLBoolean eglChooseConfig(EGLDisplay dpy, const EGLint *attrib_list, EGLConfig *configs,
++                               EGLint config_size, EGLint *num_config) override
++    {
++        return libEGL->eglChooseConfig(dpy, attrib_list, configs, config_size, num_config);
++    }
++    EGLBoolean eglGetConfigAttrib(EGLDisplay dpy, EGLConfig config, EGLint attribute,
++                                  EGLint *value) override
++    {
++        return libEGL->eglGetConfigAttrib(dpy, config, attribute, value);
++    }
++    const char *eglQueryString(EGLDisplay dpy, EGLint name) override
++    {
++        return libEGL->eglQueryString(dpy, name);
++    }
++    QFunctionPointer eglGetProcAddress(const char *procname) override
++    {
++        return reinterpret_cast<QFunctionPointer>(libEGL->eglGetProcAddress(procname));
++    }
++    EGLint eglGetError() override { return libEGL->eglGetError(); }
++};
++
++/*!
++    \class QWindowsEGLStaticContext
++    \brief Static data for QWindowsEGLContext.
++
++    Keeps the display. The class is shared via QSharedPointer in the windows, the
++    contexts and in QWindowsIntegration. The display will be closed if the last instance
++    is deleted.
++
++    No EGL or OpenGL functions are called directly. Instead, they are resolved
++    dynamically. This works even if the plugin links directly to libegl/libglesv2 so
++    there is no need to differentiate between dynamic or Angle-only builds in here.
++
++    \internal
++*/
++
++QWindowsLibEGL QWindowsEGLStaticContext::libEGL;
++QWindowsLibGLESv2 QWindowsEGLStaticContext::libGLESv2;
++std::unique_ptr<QEglConfigFunctions> QWindowsEGLStaticContext::eglConfigFunctions;
++
++#ifdef Q_CC_MINGW
++static inline void *resolveFunc(HMODULE lib, const char *name)
++{
++    const auto baseNameStr{ QString::fromLatin1(name) };
++    QString nameStr;
++    void *proc = 0;
++
++    // Play nice with 32-bit mingw: Try func first, then func@0, func@4,
++    // func@8, func@12, ..., func@64. The def file does not provide any aliases
++    // in libEGL and libGLESv2 in these builds which results in exporting
++    // function names like eglInitialize@12. This cannot be fixed without
++    // breaking binary compatibility. So be flexible here instead.
++
++    int argSize = -1;
++    while (!proc && argSize <= 64) {
++        nameStr = baseNameStr;
++        if (argSize >= 0)
++            nameStr += u'@' + QString::number(argSize);
++        argSize = argSize < 0 ? 0 : argSize + 4;
++        proc = reinterpret_cast<void *>(::GetProcAddress(lib, nameStr.toLatin1().constData()));
++    }
++    return proc;
++}
++#else
++static inline void *resolveFunc(HMODULE lib, const char *name)
++{
++    return reinterpret_cast<void *>(::GetProcAddress(lib, name));
++}
++#endif // Q_CC_MINGW
++
++void *QWindowsLibEGL::resolve(const char *name)
++{
++    return m_lib ? resolveFunc(m_lib, name) : nullptr;
++}
++
++#define GETPROC(name) reinterpret_cast<decltype(name)>(resolve(#name))
++
++#define RESOLVE(name) name = GETPROC(name)
++
++bool QWindowsLibEGL::init()
++{
++    static constexpr LPCWSTR dllName{ L"libEGL" };
++
++    qCDebug(lcQpaGl) << "Qt: Using EGL from" << dllName;
++
++    m_lib = ::LoadLibraryW(dllName);
++    if (!m_lib) {
++        qErrnoWarning(::GetLastError(), "Failed to load %s", dllName);
++        return false;
++    }
++
++    RESOLVE(eglGetError);
++    RESOLVE(eglGetDisplay);
++    RESOLVE(eglInitialize);
++    RESOLVE(eglTerminate);
++    RESOLVE(eglChooseConfig);
++    RESOLVE(eglGetConfigAttrib);
++    RESOLVE(eglQueryContext);
++    RESOLVE(eglCreateWindowSurface);
++    RESOLVE(eglCreatePbufferSurface);
++    RESOLVE(eglDestroySurface);
++    RESOLVE(eglBindAPI);
++    RESOLVE(eglSwapInterval);
++    RESOLVE(eglCreateContext);
++    RESOLVE(eglDestroyContext);
++    RESOLVE(eglMakeCurrent);
++    RESOLVE(eglGetCurrentContext);
++    RESOLVE(eglGetCurrentSurface);
++    RESOLVE(eglGetCurrentDisplay);
++    RESOLVE(eglSwapBuffers);
++    RESOLVE(eglQueryString);
++    RESOLVE(eglWaitNative);
++    RESOLVE(eglSurfaceAttrib);
++    RESOLVE(eglGetProcAddress);
++
++    if (!eglGetError || !eglGetDisplay || !eglInitialize || !eglGetProcAddress || !eglQueryString)
++        return false;
++
++    eglGetPlatformDisplayEXT = nullptr;
++    eglDebugMessageControlKHR = nullptr;
++
++#ifdef EGL_ANGLE_platform_angle
++
++    eglGetPlatformDisplayEXT = reinterpret_cast<decltype(eglGetPlatformDisplayEXT)>(
++            eglGetProcAddress("eglGetPlatformDisplayEXT"));
++    RESOLVE(eglDebugMessageControlKHR);
++#endif
++
++    return true;
++}
++
++void *QWindowsLibGLESv2::resolve(const char *name)
++{
++    return m_lib ? resolveFunc(m_lib, name) : nullptr;
++}
++
++bool QWindowsLibGLESv2::init()
++{
++    static constexpr LPCWSTR dllName{ L"libGLESv2" };
++
++    qCDebug(lcQpaGl) << "Qt: Using OpenGL ES 2.0 from" << dllName;
++
++    m_lib = ::LoadLibraryW(dllName);
++    if (!m_lib) {
++        qErrnoWarning(int(GetLastError()), "Failed to load %s", dllName);
++        return false;
++    }
++
++    void(APIENTRY * glBindTexture)(GLenum target, GLuint texture){ nullptr };
++    GLuint(APIENTRY * glCreateShader)(GLenum type){ nullptr };
++    void(APIENTRY * glClearDepthf)(GLclampf depth){ nullptr };
++    RESOLVE(glBindTexture);
++    RESOLVE(glCreateShader);
++    RESOLVE(glClearDepthf);
++    RESOLVE(glGetString);
++
++    return glBindTexture && glCreateShader && glClearDepthf;
++}
++
++QWindowsEGLStaticContext::QWindowsEGLStaticContext(EGLDisplay display, bool isYUpInNDC)
++    : m_display(display),
++      m_hasSRGBColorSpaceSupport(false),
++      m_hasSCRGBColorSpaceSupport(false),
++      m_hasBt2020PQColorSpaceSupport(false),
++      m_hasPixelFormatFloatSupport(false),
++      m_isYUpInNDC(isYUpInNDC)
++{
++    m_hasSRGBColorSpaceSupport = q_hasEglExtension(display, "EGL_KHR_gl_colorspace", eglConfigFunctions.get());
++    m_hasSCRGBColorSpaceSupport = q_hasEglExtension(display, "EGL_EXT_gl_colorspace_scrgb_linear", eglConfigFunctions.get());
++    m_hasBt2020PQColorSpaceSupport = q_hasEglExtension(display, "EGL_EXT_gl_colorspace_bt2020_pq", eglConfigFunctions.get());
++    m_hasPixelFormatFloatSupport = q_hasEglExtension(display, "EGL_EXT_pixel_format_float", eglConfigFunctions.get());
++    if (m_hasSCRGBColorSpaceSupport && !m_hasPixelFormatFloatSupport) {
++        qWarning("%s: EGL_EXT_gl_colorspace_scrgb_linear supported but EGL_EXT_pixel_format_float "
++                 "not available!", __FUNCTION__);
++        m_hasSCRGBColorSpaceSupport = false;
++    }
++}
++
++bool QWindowsEGLStaticContext::initializeAngle(QWindowsOpenGLTester::Renderers preferredType,
++                                               HDC dc, EGLDisplay *display, EGLint *major,
++                                               EGLint *minor, QWindowsOpenGLTester::Renderer *resultRenderer)
++{
++#ifdef EGL_ANGLE_platform_angle
++    if (libEGL.eglGetPlatformDisplayEXT
++        && (preferredType & QWindowsOpenGLTester::AngleBackendMask)) {
++        static constexpr std::array<std::array<EGLint, 8>, 5> anglePlatformAttributes{ {
++                { EGL_PLATFORM_ANGLE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_TYPE_D3D11_ANGLE, EGL_NONE },
++                { EGL_PLATFORM_ANGLE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_TYPE_D3D9_ANGLE, EGL_NONE },
++                { EGL_PLATFORM_ANGLE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_TYPE_D3D11_ANGLE,
++                  EGL_PLATFORM_ANGLE_DEVICE_TYPE_ANGLE,
++                  EGL_PLATFORM_ANGLE_DEVICE_TYPE_D3D_WARP_ANGLE, EGL_NONE },
++                { EGL_PLATFORM_ANGLE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_TYPE_D3D11_ANGLE,
++                  EGL_PLATFORM_ANGLE_D3D11ON12_ANGLE, EGL_TRUE, EGL_NONE },
++                { EGL_PLATFORM_ANGLE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_TYPE_OPENGL_ANGLE, EGL_NONE },
++        } };
++        const EGLint *attributes = nullptr;
++        if (preferredType & QWindowsOpenGLTester::AngleRendererD3d11) {
++            attributes = anglePlatformAttributes[0].data();
++            *resultRenderer = QWindowsOpenGLTester::AngleRendererD3d11;
++        } else if (preferredType & QWindowsOpenGLTester::AngleRendererD3d9) {
++            attributes = anglePlatformAttributes[1].data();
++            *resultRenderer = QWindowsOpenGLTester::AngleRendererD3d9;
++        } else if (preferredType & QWindowsOpenGLTester::AngleRendererD3d11Warp) {
++            attributes = anglePlatformAttributes[2].data();
++            *resultRenderer = QWindowsOpenGLTester::AngleRendererD3d11Warp;
++        } else if (preferredType & QWindowsOpenGLTester::AngleRendererD3d11On12) {
++            if (IsWindows10OrGreater()) {
++                attributes = anglePlatformAttributes[3].data();
++                *resultRenderer = QWindowsOpenGLTester::AngleRendererD3d11On12;
++            } else {
++                qWarning("%s: Attempted to use D3d11on12 in an unsupported version of windows. "
++                         "Retargeting for D3d11Warp",
++                         __FUNCTION__);
++                attributes = anglePlatformAttributes[2].data();
++                *resultRenderer = QWindowsOpenGLTester::AngleRendererD3d11Warp;
++            }
++        } else if (preferredType & QWindowsOpenGLTester::AngleRendererOpenGL) {
++            attributes = anglePlatformAttributes[4].data();
++            *resultRenderer = QWindowsOpenGLTester::AngleRendererOpenGL;
++        }
++        if (attributes) {
++#  ifdef EGL_ANGLE_platform_angle
++            {
++                EGLint result =
++                        libEGL.eglDebugMessageControlKHR(&angleDebugMessagesCallback, nullptr);
++                if (result != EGL_SUCCESS) {
++                    qWarning() << "WARNING: failed to install ANGLE debug handler, error:"
++                               << Qt::hex << Qt::showbase << result;
++                }
++            }
++#  endif
++
++            *display = libEGL.eglGetPlatformDisplayEXT(EGL_PLATFORM_ANGLE_ANGLE, dc, attributes);
++            if (!libEGL.eglInitialize(*display, major, minor)) {
++                qWarning("%s: Unable to initialize ANGLE: error 0x%x", __FUNCTION__,
++                         libEGL.eglGetError());
++                libEGL.eglTerminate(*display);
++                *display = EGL_NO_DISPLAY;
++                *major = *minor = 0;
++                return false;
++            }
++        }
++    }
++#else // EGL_ANGLE_platform_angle
++#   warning "Building QWindowsEGLStaticContext without ANGLE is not officially supported"
++    Q_UNUSED(preferredType);
++    Q_UNUSED(dc);
++    Q_UNUSED(display);
++    Q_UNUSED(major);
++    Q_UNUSED(minor);
++    Q_UNUSED(resultRenderer);
++#endif
++    return true;
++}
++
++QWindowsEGLStaticContext *
++QWindowsEGLStaticContext::create(QWindowsOpenGLTester::Renderers preferredType)
++{
++    const HDC dc{ QWindowsContext::instance()->displayContext() };
++    if (!dc) {
++        qWarning("%s: No Display", __FUNCTION__);
++        return nullptr;
++    }
++
++    if (!libEGL.init()) {
++        qWarning("%s: Failed to load and resolve libEGL functions", __FUNCTION__);
++        return nullptr;
++    }
++    if (!libGLESv2.init()) {
++        qWarning("%s: Failed to load and resolve libGLESv2 functions", __FUNCTION__);
++        return nullptr;
++    }
++    if (!eglConfigFunctions) {
++        eglConfigFunctions.reset(new IndirectFunctions(&libEGL));
++    }
++
++    EGLDisplay display{ EGL_NO_DISPLAY };
++    EGLint major{ 0 };
++    EGLint minor{ 0 };
++
++    QWindowsOpenGLTester::Renderer resultRenderer = QWindowsOpenGLTester::InvalidRenderer;
++
++    if (!initializeAngle(preferredType, dc, &display, &major, &minor, &resultRenderer)
++        && (preferredType & QWindowsOpenGLTester::AngleRendererD3d11)) {
++        preferredType &= ~QWindowsOpenGLTester::AngleRendererD3d11;
++        initializeAngle(preferredType, dc, &display, &major, &minor, &resultRenderer);
++    }
++
++    if (display == EGL_NO_DISPLAY)
++        display = libEGL.eglGetDisplay(dc);
++    if (!display) {
++        qWarning("%s: Could not obtain EGL display", __FUNCTION__);
++        return nullptr;
++    }
++
++    if (!major && !libEGL.eglInitialize(display, &major, &minor)) {
++        const auto err{ libEGL.eglGetError() };
++        qWarning("%s: Could not initialize EGL display: error 0x%x", __FUNCTION__, err);
++        if (err == EGL_NOT_INITIALIZED)
++            qWarning("%s: When using ANGLE, check if d3dcompiler_4x.dll is available",
++                     __FUNCTION__);
++        return nullptr;
++    }
++
++    qCDebug(lcQpaGl) << __FUNCTION__ << "Created EGL display" << display << 'v' << major << '.'
++                     << minor;
++    
++    /**
++     * When openGL backend is activated in ANGLE, then Y axis is flipped. Hence we should
++     * notify all the users about it.
++     */
++    const bool isYUpInNDC = resultRenderer != QWindowsOpenGLTester::AngleRendererOpenGL;
++    return new QWindowsEGLStaticContext(display, isYUpInNDC);
++}
++
++QWindowsEGLStaticContext::~QWindowsEGLStaticContext()
++{
++    qCDebug(lcQpaGl) << __FUNCTION__ << "Releasing EGL display " << m_display;
++    libEGL.eglTerminate(m_display);
++
++#ifdef EGL_ANGLE_platform_angle
++    {
++        EGLint result = libEGL.eglDebugMessageControlKHR(nullptr, nullptr);
++        if (result != EGL_SUCCESS) {
++            qWarning() << "WARNING: failed to de-install ANGLE debug handler, error:" << Qt::hex
++                       << Qt::showbase << result;
++        }
++    }
++#endif
++}
++
++QWindowsOpenGLContext *QWindowsEGLStaticContext::createContext(QOpenGLContext *context)
++{
++    return new QWindowsEGLContext(this, context->format(), context->shareHandle());
++}
++
++QWindowsOpenGLContext *QWindowsEGLStaticContext::createContext(EGLContext context, EGLDisplay display, QOpenGLContext *shareContext)
++{
++    return new QWindowsEGLContext(this, context, display, shareContext);
++}
++
++void *QWindowsEGLStaticContext::createWindowSurface(void *nativeWindow, void *nativeConfig,
++                                                    const QColorSpace &colorSpace, int *err)
++{
++    *err = 0;
++
++    EGLint eglColorSpace{ EGL_GL_COLORSPACE_LINEAR_KHR };
++    bool colorSpaceSupported{ colorSpace.isValid() };
++
++    if (colorSpace == QColorSpace::SRgb) {
++        colorSpaceSupported = m_hasSRGBColorSpaceSupport;
++        eglColorSpace = EGL_GL_COLORSPACE_SRGB_KHR;
++    } else if (colorSpace == QColorSpace::SRgbLinear) {
++        colorSpaceSupported = m_hasSCRGBColorSpaceSupport;
++        eglColorSpace = EGL_GL_COLORSPACE_SCRGB_LINEAR_EXT;
++    } else if (colorSpace == QColorSpace::Bt2100Pq) {
++        colorSpaceSupported = m_hasBt2020PQColorSpaceSupport;
++        eglColorSpace = EGL_GL_COLORSPACE_BT2020_PQ_EXT;
++    }
++
++    std::vector<EGLint> attributes;
++
++    if (colorSpaceSupported) {
++        attributes.emplace_back(EGL_GL_COLORSPACE);
++        attributes.emplace_back(eglColorSpace);
++    }
++
++    if (!m_isYUpInNDC) {
++        attributes.emplace_back(EGL_SURFACE_ORIENTATION_ANGLE);
++        attributes.emplace_back(EGL_SURFACE_ORIENTATION_INVERT_Y_ANGLE);
++    }
++
++    attributes.emplace_back(EGL_NONE);
++
++    if (!colorSpaceSupported && colorSpace.isValid())
++        qWarning("%s: Requested color space is not supported by EGL implementation: %s %s (egl: 0x%x)",
++                 __FUNCTION__,
++                 QMetaEnum::fromType<QColorSpace::Primaries>().valueToKey(int(colorSpace.primaries())),
++                 QMetaEnum::fromType<QColorSpace::TransferFunction>().valueToKey(int(colorSpace.transferFunction())),
++                 eglColorSpace);
++
++    EGLSurface surface{ libEGL.eglCreateWindowSurface(
++            m_display, nativeConfig, static_cast<EGLNativeWindowType>(nativeWindow),
++            attributes.data()) };
++    if (surface == EGL_NO_SURFACE) {
++        *err = libEGL.eglGetError();
++        qWarning("%s: Could not create the EGL window surface: 0x%x", __FUNCTION__, *err);
++    }
++
++    return surface;
++}
++
++void QWindowsEGLStaticContext::destroyWindowSurface(void *nativeSurface)
++{
++    libEGL.eglDestroySurface(m_display, nativeSurface);
++}
++
++/*!
++    \class QWindowsEGLContext
++    \brief Open EGL context.
++
++    \section1 Using QWindowsEGLContext for Desktop with ANGLE
++    \section2 Build Instructions
++    \list
++    \o Install the Direct X SDK
++    \o Checkout and build ANGLE (SVN repository) as explained here:
++       \l{https://chromium.googlesource.com/angle/angle/+/master/README.md}
++       When building for 64bit, de-activate the "WarnAsError" option
++       in every project file (as otherwise integer conversion
++       warnings will break the build).
++    \o Run configure.exe with the options "-opengl es2".
++    \o Build qtbase and test some examples.
++    \endlist
++
++    \internal
++*/
++QWindowsEGLContext::QWindowsEGLContext(QWindowsEGLStaticContext *staticContext,
++                                       const QSurfaceFormat &format, QPlatformOpenGLContext *share)
++    : m_staticContext(staticContext), m_eglDisplay(staticContext->display())
++{
++    if (!m_staticContext)
++        return;
++
++    m_eglConfig = q_configFromGLFormat(m_eglDisplay, format, false, EGL_WINDOW_BIT, m_staticContext->eglConfigFunctions.get());
++    m_format = q_glFormatFromConfig(m_eglDisplay, m_eglConfig, format, m_staticContext->eglConfigFunctions.get());
++    m_shareContext = [&]() -> EGLContext {
++        if (!share)
++            return nullptr;
++        if (const auto realShare = dynamic_cast<QWindowsEGLContext *>(share))
++            return realShare->m_eglContext;
++        return nullptr;
++    }();
++
++    const EGLint major{ m_format.majorVersion() };
++    const EGLint minor{ m_format.minorVersion() };
++    if (major > 3 || (major == 3 && minor > 0))
++        qWarning("QWindowsEGLContext: ANGLE only partially supports OpenGL ES > 3.0");
++    const std::array<EGLint, 5> contextAttrs{
++        EGL_CONTEXT_MAJOR_VERSION, major, EGL_CONTEXT_MINOR_VERSION, minor, EGL_NONE,
++    };
++
++    QWindowsEGLStaticContext::libEGL.eglBindAPI(m_api);
++    m_eglContext = QWindowsEGLStaticContext::libEGL.eglCreateContext(
++            m_eglDisplay, m_eglConfig, m_shareContext, contextAttrs.data());
++    if (m_eglContext == EGL_NO_CONTEXT && m_shareContext != EGL_NO_CONTEXT) {
++        m_shareContext = nullptr;
++        m_eglContext = QWindowsEGLStaticContext::libEGL.eglCreateContext(
++                m_eglDisplay, m_eglConfig, nullptr, contextAttrs.data());
++    }
++
++    if (m_eglContext == EGL_NO_CONTEXT) {
++        const auto err{ QWindowsEGLStaticContext::libEGL.eglGetError() };
++        qWarning("QWindowsEGLContext: Failed to create context, eglError: %x, this: %p", err, this);
++        // ANGLE gives bad alloc when it fails to reset a previously lost D3D device.
++        // A common cause for this is disabling the graphics adapter used by the app.
++        if (err == EGL_BAD_ALLOC)
++            qWarning("QWindowsEGLContext: Graphics device lost. (Did the adapter get disabled?)");
++        return;
++    }
++
++    // Make the context current to ensure the GL version query works. This needs a surface too.
++    static constexpr std::array<EGLint, 7> pbufferAttributes{
++        EGL_WIDTH, 1, EGL_HEIGHT, 1, EGL_LARGEST_PBUFFER, EGL_FALSE, EGL_NONE
++    };
++    EGLSurface pbuffer{ QWindowsEGLStaticContext::libEGL.eglCreatePbufferSurface(
++            m_eglDisplay, m_eglConfig, pbufferAttributes.data()) };
++    if (pbuffer == EGL_NO_SURFACE)
++        return;
++
++    EGLDisplay prevDisplay{ QWindowsEGLStaticContext::libEGL.eglGetCurrentDisplay() };
++    if (prevDisplay == EGL_NO_DISPLAY) // when no context is current
++        prevDisplay = m_eglDisplay;
++    EGLContext prevContext{ QWindowsEGLStaticContext::libEGL.eglGetCurrentContext() };
++    EGLSurface prevSurfaceDraw{ QWindowsEGLStaticContext::libEGL.eglGetCurrentSurface(EGL_DRAW) };
++    EGLSurface prevSurfaceRead{ QWindowsEGLStaticContext::libEGL.eglGetCurrentSurface(EGL_READ) };
++
++    if (QWindowsEGLStaticContext::libEGL.eglMakeCurrent(m_eglDisplay, pbuffer, pbuffer,
++                                                        m_eglContext)) {
++        const GLubyte *s{ QWindowsEGLStaticContext::libGLESv2.glGetString(GL_VERSION) };
++        if (s) {
++            const QByteArray version(reinterpret_cast<const char *>(s));
++            int major{};
++            int minor{};
++            if (QPlatformOpenGLContext::parseOpenGLVersion(version, major, minor)) {
++                m_format.setMajorVersion(major);
++                m_format.setMinorVersion(minor);
++            }
++        }
++        m_format.setProfile(QSurfaceFormat::NoProfile);
++        m_format.setOptions(QSurfaceFormat::FormatOptions());
++        QWindowsEGLStaticContext::libEGL.eglMakeCurrent(prevDisplay, prevSurfaceDraw,
++                                                        prevSurfaceRead, prevContext);
++    }
++    QWindowsEGLStaticContext::libEGL.eglDestroySurface(m_eglDisplay, pbuffer);
++}
++
++QWindowsEGLContext::QWindowsEGLContext(QWindowsEGLStaticContext *staticContext, 
++                                       EGLContext context, EGLDisplay display, QOpenGLContext *shareContext)
++    : m_staticContext(staticContext), m_eglDisplay(display)
++{
++    if (!m_staticContext)
++        return;
++
++    m_eglContext = context;
++
++    m_shareContext = [&]() -> EGLContext {
++        if (!shareContext)
++            return nullptr;
++        if (const auto realShare = dynamic_cast<QWindowsEGLContext *>(shareContext))
++            return realShare->m_eglContext;
++        return nullptr;
++    }();
++
++    QWindowsEGLStaticContext::libEGL.eglBindAPI(m_api);
++
++    // Figure out the EGLConfig.
++    EGLint value = 0;
++    if (!QWindowsEGLStaticContext::libEGL.eglQueryContext(m_eglDisplay, m_eglContext, EGL_CONFIG_ID, &value)) {
++        qWarning("QWindowsEGLContext: failed to query framebuffer configuration ID from a native context");
++        m_eglContext = EGL_NO_CONTEXT;
++        return;
++    }
++
++    EGLint n = 0;
++    EGLConfig cfg;
++    const EGLint attribs[] = { EGL_CONFIG_ID, value, EGL_NONE };
++    if (QWindowsEGLStaticContext::libEGL.eglChooseConfig(m_eglDisplay, attribs, &cfg, 1, &n) && n == 1) {
++        m_eglConfig = cfg;
++        m_format = q_glFormatFromConfig(m_eglDisplay, m_eglConfig, {}, m_staticContext->eglConfigFunctions.get());
++    } else {
++        qWarning("QWindowsEGLContext: Failed to get framebuffer configuration for context");
++        m_eglContext = EGL_NO_CONTEXT;
++    }
++}
++
++QWindowsEGLContext::~QWindowsEGLContext()
++{
++    if (m_eglContext != EGL_NO_CONTEXT) {
++        QWindowsEGLStaticContext::libEGL.eglDestroyContext(m_eglDisplay, m_eglContext);
++        m_eglContext = EGL_NO_CONTEXT;
++    }
++}
++
++bool QWindowsEGLContext::makeCurrent(QPlatformSurface *surface)
++{
++    Q_ASSERT(surface->surface()->supportsOpenGL());
++
++    QWindowsEGLStaticContext::libEGL.eglBindAPI(m_api);
++
++    auto *window{ dynamic_cast<QWindowsWindow *>(surface) };
++    Q_ASSERT(window);
++    int err{};
++    auto eglSurface{ static_cast<EGLSurface>(window->surface(m_eglConfig, &err)) };
++    if (eglSurface == EGL_NO_SURFACE) {
++        if (err == EGL_CONTEXT_LOST) {
++            m_eglContext = EGL_NO_CONTEXT;
++            qCDebug(lcQpaGl) << "Got EGL context lost in createWindowSurface() for context" << this;
++        } else if (err == EGL_BAD_ACCESS) {
++            // With ANGLE this means no (D3D) device and can happen when disabling/changing graphics
++            // adapters.
++            qCDebug(lcQpaGl) << "Bad access (missing device?) in createWindowSurface() for context"
++                             << this;
++        } else if (err == EGL_BAD_MATCH) {
++            qCDebug(lcQpaGl) << "Got bad match in createWindowSurface() for context" << this
++                             << "Check color space configuration.";
++        }
++        // Simulate context loss as the context is useless.
++        QWindowsEGLStaticContext::libEGL.eglDestroyContext(m_eglDisplay, m_eglContext);
++        m_eglContext = EGL_NO_CONTEXT;
++        return false;
++    }
++
++    // shortcut: on some GPUs, eglMakeCurrent is not a cheap operation
++    if (QWindowsEGLStaticContext::libEGL.eglGetCurrentContext() == m_eglContext
++        && QWindowsEGLStaticContext::libEGL.eglGetCurrentDisplay() == m_eglDisplay
++        && QWindowsEGLStaticContext::libEGL.eglGetCurrentSurface(EGL_READ) == eglSurface
++        && QWindowsEGLStaticContext::libEGL.eglGetCurrentSurface(EGL_DRAW) == eglSurface) {
++        return true;
++    }
++
++    const auto ok{ QWindowsEGLStaticContext::libEGL.eglMakeCurrent(m_eglDisplay, eglSurface,
++                                                                   eglSurface, m_eglContext) };
++    if (ok) {
++        const auto requestedSwapInterval{ surface->format().swapInterval() };
++        if (requestedSwapInterval >= 0 && m_swapInterval != requestedSwapInterval) {
++            m_swapInterval = requestedSwapInterval;
++            QWindowsEGLStaticContext::libEGL.eglSwapInterval(m_staticContext->display(),
++                                                             m_swapInterval);
++        }
++    } else {
++        err = QWindowsEGLStaticContext::libEGL.eglGetError();
++        // EGL_CONTEXT_LOST (loss of the D3D device) is not necessarily fatal.
++        // Qt Quick is able to recover for example.
++        if (err == EGL_CONTEXT_LOST) {
++            m_eglContext = EGL_NO_CONTEXT;
++            qCDebug(lcQpaGl) << "Got EGL context lost in makeCurrent() for context" << this;
++            // Drop the surface. Will recreate on the next makeCurrent.
++            window->invalidateSurface();
++        } else {
++            qWarning("%s: Failed to make surface current. eglError: %x, this: %p", __FUNCTION__,
++                     err, this);
++        }
++    }
++
++    return ok;
++}
++
++void QWindowsEGLContext::doneCurrent()
++{
++    QWindowsEGLStaticContext::libEGL.eglBindAPI(m_api);
++    const auto ok{ QWindowsEGLStaticContext::libEGL.eglMakeCurrent(
++            m_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT) };
++    if (!ok)
++        qWarning("%s: Failed to make no context/surface current. eglError: %d, this: %p",
++                 __FUNCTION__, QWindowsEGLStaticContext::libEGL.eglGetError(), this);
++}
++
++void QWindowsEGLContext::swapBuffers(QPlatformSurface *surface)
++{
++    QWindowsEGLStaticContext::libEGL.eglBindAPI(m_api);
++    auto *window{ dynamic_cast<QWindowsWindow *>(surface) };
++    Q_ASSERT(window);
++    int err{};
++    auto eglSurface{ static_cast<EGLSurface>(window->surface(m_eglConfig, &err)) };
++    if (eglSurface == EGL_NO_SURFACE) {
++        if (err == EGL_CONTEXT_LOST) {
++            m_eglContext = EGL_NO_CONTEXT;
++            qCDebug(lcQpaGl) << "Got EGL context lost in createWindowSurface() for context" << this;
++        }
++        return;
++    }
++
++    const auto ok{ QWindowsEGLStaticContext::libEGL.eglSwapBuffers(m_eglDisplay, eglSurface) };
++    if (!ok) {
++        err = QWindowsEGLStaticContext::libEGL.eglGetError();
++        if (err == EGL_CONTEXT_LOST) {
++            m_eglContext = EGL_NO_CONTEXT;
++            qCDebug(lcQpaGl) << "Got EGL context lost in eglSwapBuffers()";
++        } else {
++            qWarning("%s: Failed to swap buffers. eglError: %d, this: %p", __FUNCTION__, err, this);
++        }
++    }
++}
++
++QFunctionPointer QWindowsEGLContext::getProcAddress(const char *procName)
++{
++    QWindowsEGLStaticContext::libEGL.eglBindAPI(m_api);
++
++    QFunctionPointer procAddress{ nullptr };
++
++    // Special logic for ANGLE extensions for blitFramebuffer and
++    // renderbufferStorageMultisample. In version 2 contexts the extensions
++    // must be used instead of the suffixless, version 3.0 functions.
++    if (m_format.majorVersion() < 3) {
++        std::string_view procNameView{ procName };
++        if (procNameView == "glBlitFramebuffer"sv
++            || procNameView == "glRenderbufferStorageMultisample"sv) {
++            std::string extName{ procNameView };
++            extName += "ANGLE"sv;
++            procAddress = reinterpret_cast<QFunctionPointer>(
++                    QWindowsEGLStaticContext::libEGL.eglGetProcAddress(procNameView.data()));
++        }
++    }
++
++    if (!procAddress)
++        procAddress = reinterpret_cast<QFunctionPointer>(
++                QWindowsEGLStaticContext::libEGL.eglGetProcAddress(procName));
++
++    // We support AllGLFunctionsQueryable, which means this function must be able to
++    // return a function pointer for standard GLES2 functions too. These are not
++    // guaranteed to be queryable via eglGetProcAddress().
++    if (!procAddress)
++        procAddress = reinterpret_cast<QFunctionPointer>(
++                QWindowsEGLStaticContext::libGLESv2.resolve(procName));
++
++    if (QWindowsContext::verbose > 1)
++        qCDebug(lcQpaGl) << __FUNCTION__ << procName
++                         << QWindowsEGLStaticContext::libEGL.eglGetCurrentContext() << "returns"
++                         << reinterpret_cast<void *>(procAddress);
++
++    return procAddress;
++}
++
++void QWindowsEGLContext::beginFrame()
++{
++    // The D3D backend checks for buffer resizes inside eglWaitNative, so we should
++    // call this function before every frame to avoid window flicker
++    EGLBoolean result = QWindowsEGLStaticContext::libEGL.eglWaitNative(EGL_CORE_NATIVE_ENGINE);
++    if (result == EGL_FALSE) {
++        qCWarning(lcQpaGl, "QWindowsEGLContext::beforeCompose: eglWaitNative failed");
++    }
++}
++
++bool QWindowsEGLContext::isYUpInNDC() const
++{
++    return m_staticContext->isYUpInNDC();
++}
++
++QT_END_NAMESPACE
+diff --git a/src/plugins/platforms/windows/qwindowseglcontext.h b/src/plugins/platforms/windows/qwindowseglcontext.h
+new file mode 100644
+index 00000000..348c93b4
+--- /dev/null
++++ b/src/plugins/platforms/windows/qwindowseglcontext.h
+@@ -0,0 +1,167 @@
++// Copyright (C) 2016 The Qt Company Ltd.
++// SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
++
++#ifndef QWINDOWSEGLCONTEXT_H
++#define QWINDOWSEGLCONTEXT_H
++
++#include "qwindowsopenglcontext.h"
++#include "qwindowsopengltester.h"
++#include <EGL/egl.h>
++
++QT_BEGIN_NAMESPACE
++
++class QEglConfigFunctions;
++
++struct QWindowsLibEGL
++{
++    bool init();
++
++    EGLint(EGLAPIENTRY *eglGetError)(void);
++    EGLDisplay(EGLAPIENTRY *eglGetDisplay)(EGLNativeDisplayType display_id);
++    EGLBoolean(EGLAPIENTRY *eglInitialize)(EGLDisplay dpy, EGLint *major, EGLint *minor);
++    EGLBoolean(EGLAPIENTRY *eglTerminate)(EGLDisplay dpy);
++    EGLBoolean(EGLAPIENTRY *eglChooseConfig)(EGLDisplay dpy, const EGLint *attrib_list,
++                                             EGLConfig *configs, EGLint config_size,
++                                             EGLint *num_config);
++    EGLBoolean(EGLAPIENTRY *eglGetConfigAttrib)(EGLDisplay dpy, EGLConfig config, EGLint attribute,
++                                                EGLint *value);
++    EGLBoolean(EGLAPIENTRY *eglQueryContext)(EGLDisplay dpy, EGLContext ctx, EGLint attribute,
++                                             EGLint *value);
++    EGLSurface(EGLAPIENTRY *eglCreateWindowSurface)(EGLDisplay dpy, EGLConfig config,
++                                                    EGLNativeWindowType win,
++                                                    const EGLint *attrib_list);
++    EGLSurface(EGLAPIENTRY *eglCreatePbufferSurface)(EGLDisplay dpy, EGLConfig config,
++                                                     const EGLint *attrib_list);
++    EGLBoolean(EGLAPIENTRY *eglDestroySurface)(EGLDisplay dpy, EGLSurface surface);
++    EGLBoolean(EGLAPIENTRY *eglBindAPI)(EGLenum api);
++    EGLBoolean(EGLAPIENTRY *eglSwapInterval)(EGLDisplay dpy, EGLint interval);
++    EGLContext(EGLAPIENTRY *eglCreateContext)(EGLDisplay dpy, EGLConfig config,
++                                              EGLContext share_context, const EGLint *attrib_list);
++    EGLBoolean(EGLAPIENTRY *eglDestroyContext)(EGLDisplay dpy, EGLContext ctx);
++    EGLBoolean(EGLAPIENTRY *eglMakeCurrent)(EGLDisplay dpy, EGLSurface draw, EGLSurface read,
++                                            EGLContext ctx);
++    EGLContext(EGLAPIENTRY *eglGetCurrentContext)(void);
++    EGLSurface(EGLAPIENTRY *eglGetCurrentSurface)(EGLint readdraw);
++    EGLDisplay(EGLAPIENTRY *eglGetCurrentDisplay)(void);
++    EGLBoolean(EGLAPIENTRY *eglSwapBuffers)(EGLDisplay dpy, EGLSurface surface);
++    const char *(EGLAPIENTRY *eglQueryString)(EGLDisplay dpy, EGLint name);
++    QFunctionPointer(EGLAPIENTRY *eglGetProcAddress)(const char *procname);
++    EGLBoolean (EGLAPIENTRY * eglWaitNative)(EGLint engine);
++    EGLBoolean (EGLAPIENTRY * eglSurfaceAttrib)(EGLDisplay display, EGLSurface surface, EGLint attribute, EGLint value);
++
++    EGLDisplay(EGLAPIENTRY *eglGetPlatformDisplayEXT)(EGLenum platform, void *native_display,
++                                                      const EGLint *attrib_list);
++
++    typedef void *EGLObjectKHR;
++    typedef void *EGLLabelKHR;
++    typedef void(APIENTRY *EGLDEBUGPROCKHR)(EGLenum error, const char *command, EGLint messageType,
++                                            EGLLabelKHR threadLabel, EGLLabelKHR objectLabel,
++                                            const char *message);
++    EGLint(EGLAPIENTRY *eglDebugMessageControlKHR)(EGLDEBUGPROCKHR callback,
++                                                   const EGLAttrib *attrib_list);
++
++private:
++    void *resolve(const char *name);
++    HMODULE m_lib;
++};
++
++struct QWindowsLibGLESv2
++{
++    bool init();
++
++    void *moduleHandle() const { return m_lib; }
++
++    const GLubyte *(APIENTRY *glGetString)(GLenum name);
++
++    void *resolve(const char *name);
++
++private:
++    HMODULE m_lib;
++};
++
++class QWindowsEGLStaticContext : public QWindowsStaticOpenGLContext
++{
++    Q_DISABLE_COPY_MOVE(QWindowsEGLStaticContext)
++
++public:
++    static QWindowsEGLStaticContext *create(QWindowsOpenGLTester::Renderers preferredType);
++    ~QWindowsEGLStaticContext() override;
++
++    EGLDisplay display() const { return m_display; }
++
++    QWindowsOpenGLContext *createContext(QOpenGLContext *context) override;
++    QWindowsOpenGLContext *createContext(EGLContext context, EGLDisplay display, QOpenGLContext *shareContext);
++
++    void *moduleHandle() const override { return libGLESv2.moduleHandle(); }
++    QOpenGLContext::OpenGLModuleType moduleType() const override { return QOpenGLContext::LibGLES; }
++
++    void *createWindowSurface(void *nativeWindow, void *nativeConfig, const QColorSpace &colorSpace,
++                              int *err) override;
++    void destroyWindowSurface(void *nativeSurface) override;
++
++    QSurfaceFormat formatFromConfig(EGLDisplay display, EGLConfig config,
++                                    const QSurfaceFormat &referenceFormat);
++
++    bool hasPixelFormatFloatSupport() const { return m_hasPixelFormatFloatSupport; }
++    bool isYUpInNDC() const { return m_isYUpInNDC; }
++
++    static QWindowsLibEGL libEGL;
++    static QWindowsLibGLESv2 libGLESv2;
++    static std::unique_ptr<QEglConfigFunctions> eglConfigFunctions;
++
++private:
++    explicit QWindowsEGLStaticContext(EGLDisplay display, bool isYUpInNDC);
++    static bool initializeAngle(QWindowsOpenGLTester::Renderers preferredType, HDC dc,
++                                EGLDisplay *display, EGLint *major, EGLint *minor,
++                                QWindowsOpenGLTester::Renderer *resultRenderer);
++
++    const EGLDisplay m_display;
++    bool m_hasSRGBColorSpaceSupport;
++    bool m_hasSCRGBColorSpaceSupport;
++    bool m_hasBt2020PQColorSpaceSupport;
++    bool m_hasPixelFormatFloatSupport;
++    bool m_isYUpInNDC;
++};
++
++class QWindowsEGLContext : public QWindowsOpenGLContext, public QNativeInterface::QEGLContext
++{
++public:
++    explicit QWindowsEGLContext(QWindowsEGLStaticContext *staticContext,
++                                const QSurfaceFormat &format, QPlatformOpenGLContext *share);
++    explicit QWindowsEGLContext(QWindowsEGLStaticContext *staticContext, 
++                                EGLContext context, EGLDisplay display, QOpenGLContext *shareContext);
++    ~QWindowsEGLContext() override;
++
++    void beginFrame() override;
++    bool makeCurrent(QPlatformSurface *surface) override;
++    void doneCurrent() override;
++    void swapBuffers(QPlatformSurface *surface) override;
++    QFunctionPointer getProcAddress(const char *procName) override;
++
++    QSurfaceFormat format() const override { return m_format; }
++    bool isSharing() const override { return m_shareContext != EGL_NO_CONTEXT; }
++    bool isValid() const override { return m_eglContext != EGL_NO_CONTEXT && !m_markedInvalid; }
++    bool isYUpInNDC() const override;
++
++    EGLContext nativeContext() const override { return m_eglContext; }
++    EGLDisplay display() const override { return m_eglDisplay; }
++    EGLConfig config() const override { return m_eglConfig; }
++
++    virtual void invalidateContext() override { m_markedInvalid = true; }
++
++private:
++    QWindowsEGLStaticContext *m_staticContext;
++    EGLContext m_eglContext;
++    EGLContext m_shareContext;
++    EGLDisplay m_eglDisplay;
++    EGLConfig m_eglConfig;
++    QSurfaceFormat m_format;
++    EGLenum m_api = EGL_OPENGL_ES_API;
++    int m_swapInterval = -1;
++
++    bool m_markedInvalid = false;
++};
++
++QT_END_NAMESPACE
++
++#endif // QWINDOWSEGLCONTEXT_H
+diff --git a/src/plugins/platforms/windows/qwindowsglcontext.cpp b/src/plugins/platforms/windows/qwindowsglcontext.cpp
+index 885b2e22..eef8852b 100644
+--- a/src/plugins/platforms/windows/qwindowsglcontext.cpp
++++ b/src/plugins/platforms/windows/qwindowsglcontext.cpp
+@@ -931,7 +931,7 @@ QOpenGLTemporaryContext::~QOpenGLTemporaryContext()
+ 
+     No WGL or OpenGL functions are called directly from the windows plugin. Instead, the
+     static context loads opengl32.dll and resolves the necessary functions. This allows
+-    building the plugin without linking to opengl32 and enables QT_OPENGL_DYNAMIC builds
++    building the plugin without linking to opengl32 and enables dynamic builds
+     where both the EGL and WGL (this) based implementation of the context are built.
+ 
+     \note Initialization requires an active context (see create()).
+@@ -1340,7 +1340,7 @@ QFunctionPointer QWindowsGLContext::getProcAddress(const char *procName)
+     // We support AllGLFunctionsQueryable, which means this function must be able to
+     // return a function pointer even for functions that are in GL.h and exported
+     // normally from opengl32.dll. wglGetProcAddress() is not guaranteed to work for such
+-    // functions, however in QT_OPENGL_DYNAMIC builds QOpenGLFunctions will just blindly
++    // functions, however in dynamic builds QOpenGLFunctions will just blindly
+     // call into here for _any_ OpenGL function.
+     if (procAddress == nullptr || reinterpret_cast<quintptr>(procAddress) < 4u
+         || procAddress == reinterpret_cast<QFunctionPointer>(-1)) {
+diff --git a/src/plugins/platforms/windows/qwindowsglcontext.h b/src/plugins/platforms/windows/qwindowsglcontext.h
+index 2c68cd39..58f9f194 100644
+--- a/src/plugins/platforms/windows/qwindowsglcontext.h
++++ b/src/plugins/platforms/windows/qwindowsglcontext.h
+@@ -139,7 +139,7 @@ public:
+     static QByteArray getGlString(unsigned int which);
+ 
+     QWindowsOpenGLContext *createContext(QOpenGLContext *context) override;
+-    QWindowsOpenGLContext *createContext(HGLRC context, HWND window) override;
++    QWindowsOpenGLContext *createContext(HGLRC context, HWND window);
+     void *moduleHandle() const override { return opengl32.moduleHandle(); }
+     QOpenGLContext::OpenGLModuleType moduleType() const override
+     { return QOpenGLContext::LibGL; }
+diff --git a/src/plugins/platforms/windows/qwindowsintegration.cpp b/src/plugins/platforms/windows/qwindowsintegration.cpp
+index e2aae1be..da4c760f 100644
+--- a/src/plugins/platforms/windows/qwindowsintegration.cpp
++++ b/src/plugins/platforms/windows/qwindowsintegration.cpp
+@@ -55,6 +55,9 @@
+ 
+ #include <limits.h>
+ 
++#if QT_CONFIG(egl)
++#  include "qwindowseglcontext.h"
++#endif
+ #if !defined(QT_NO_OPENGL)
+ #  include "qwindowsglcontext.h"
+ #endif
+@@ -361,7 +364,6 @@ QWindowsWindow *QWindowsIntegration::createPlatformWindowHelper(QWindow *window,
+ 
+ QWindowsStaticOpenGLContext *QWindowsStaticOpenGLContext::doCreate()
+ {
+-#if defined(QT_OPENGL_DYNAMIC)
+     QWindowsOpenGLTester::Renderer requestedRenderer = QWindowsOpenGLTester::requestedRenderer();
+     switch (requestedRenderer) {
+     case QWindowsOpenGLTester::DesktopGl:
+@@ -374,6 +376,17 @@ QWindowsStaticOpenGLContext *QWindowsStaticOpenGLContext::doCreate()
+         }
+         qCWarning(lcQpaGl, "System OpenGL failed. Falling back to Software OpenGL.");
+         return QOpenGLStaticContext::create(true);
++#if QT_CONFIG(egl)
++    // If ANGLE is requested, use it, don't try anything else.
++    case QWindowsOpenGLTester::AngleRendererD3d9:
++    case QWindowsOpenGLTester::AngleRendererD3d11:
++    case QWindowsOpenGLTester::AngleRendererD3d11On12:
++    case QWindowsOpenGLTester::AngleRendererD3d11Warp:
++    case QWindowsOpenGLTester::AngleRendererOpenGL:
++        return QWindowsEGLStaticContext::create(requestedRenderer);
++    case QWindowsOpenGLTester::Gles:
++        return QWindowsEGLStaticContext::create(requestedRenderer);
++#endif
+     case QWindowsOpenGLTester::SoftwareRasterizer:
+         if (QWindowsStaticOpenGLContext *swCtx = QOpenGLStaticContext::create(true))
+             return swCtx;
+@@ -399,10 +412,14 @@ QWindowsStaticOpenGLContext *QWindowsStaticOpenGLContext::doCreate()
+             return glCtx;
+         }
+     }
+-    return QOpenGLStaticContext::create(true);
+-#else
+-    return QOpenGLStaticContext::create();
++#if QT_CONFIG(egl)
++    if (QWindowsOpenGLTester::Renderers glesRenderers =
++                supportedRenderers & QWindowsOpenGLTester::GlesMask) {
++        if (QWindowsEGLStaticContext *eglCtx = QWindowsEGLStaticContext::create(glesRenderers))
++            return eglCtx;
++    }
+ #endif
++    return QOpenGLStaticContext::create(true);
+ }
+ 
+ QWindowsStaticOpenGLContext *QWindowsStaticOpenGLContext::create()
+@@ -423,13 +440,9 @@ QPlatformOpenGLContext *QWindowsIntegration::createPlatformOpenGLContext(QOpenGL
+ 
+ QOpenGLContext::OpenGLModuleType QWindowsIntegration::openGLModuleType()
+ {
+-#if !defined(QT_OPENGL_DYNAMIC)
+-    return QOpenGLContext::LibGL;
+-#else
+     if (const QWindowsStaticOpenGLContext *staticOpenGLContext = QWindowsIntegration::staticOpenGLContext())
+         return staticOpenGLContext->moduleType();
+     return QOpenGLContext::LibGL;
+-#endif
+ }
+ 
+ HMODULE QWindowsIntegration::openGLModuleHandle() const
+@@ -445,7 +458,8 @@ QOpenGLContext *QWindowsIntegration::createOpenGLContext(HGLRC ctx, HWND window,
+     if (!ctx || !window)
+         return nullptr;
+ 
+-    if (QWindowsStaticOpenGLContext *staticOpenGLContext = QWindowsIntegration::staticOpenGLContext()) {
++    if (auto *staticOpenGLContext = dynamic_cast<QOpenGLStaticContext *>(
++                QWindowsIntegration::staticOpenGLContext())) {
+         std::unique_ptr<QWindowsOpenGLContext> result(staticOpenGLContext->createContext(ctx, window));
+         if (result->isValid()) {
+             auto *context = new QOpenGLContext;
+@@ -459,6 +473,28 @@ QOpenGLContext *QWindowsIntegration::createOpenGLContext(HGLRC ctx, HWND window,
+     return nullptr;
+ }
+ 
++#if QT_CONFIG(egl)
++QOpenGLContext *QWindowsIntegration::createOpenGLContext(EGLContext context, EGLDisplay display, QOpenGLContext *shareContext) const
++{
++    if (!context)
++        return nullptr;
++
++    if (auto *staticOpenGLContext = dynamic_cast<QWindowsEGLStaticContext *>(
++        QWindowsIntegration::staticOpenGLContext())) {
++            std::unique_ptr<QWindowsOpenGLContext> result(staticOpenGLContext->createContext(context, display, shareContext));
++        if (result->isValid()) {
++            auto *context = new QOpenGLContext;
++            context->setShareContext(shareContext);
++            auto *contextPrivate = QOpenGLContextPrivate::get(context);
++            contextPrivate->adopt(result.release());
++            return context;
++        }
++    }
++
++    return nullptr;
++}
++#endif
++
+ QWindowsStaticOpenGLContext *QWindowsIntegration::staticOpenGLContext()
+ {
+     QWindowsIntegration *integration = QWindowsIntegration::instance();
+diff --git a/src/plugins/platforms/windows/qwindowsintegration.h b/src/plugins/platforms/windows/qwindowsintegration.h
+index ad493986..9c07be32 100644
+--- a/src/plugins/platforms/windows/qwindowsintegration.h
++++ b/src/plugins/platforms/windows/qwindowsintegration.h
+@@ -26,6 +26,9 @@ class QWindowsStaticOpenGLContext;
+ class QWindowsIntegration : public QPlatformIntegration
+ #ifndef QT_NO_OPENGL
+     , public QNativeInterface::Private::QWindowsGLIntegration
++#  if QT_CONFIG(egl)
++   , public QNativeInterface::Private::QEGLIntegration
++#  endif
+ #endif
+     , public QWindowsApplication
+ {
+@@ -63,6 +66,9 @@ public:
+     HMODULE openGLModuleHandle() const override;
+     QOpenGLContext *createOpenGLContext(HGLRC context, HWND window,
+                                         QOpenGLContext *shareContext) const override;
++#  if QT_CONFIG(egl)
++    QOpenGLContext *createOpenGLContext(EGLContext context, EGLDisplay display, QOpenGLContext *shareContext) const override;
++#  endif
+ #endif
+     QAbstractEventDispatcher *createEventDispatcher() const override;
+     void initialize() override;
+diff --git a/src/plugins/platforms/windows/qwindowsnativeinterface.cpp b/src/plugins/platforms/windows/qwindowsnativeinterface.cpp
+index 7d22a824..c1cfc51d 100644
+--- a/src/plugins/platforms/windows/qwindowsnativeinterface.cpp
++++ b/src/plugins/platforms/windows/qwindowsnativeinterface.cpp
+@@ -17,10 +17,19 @@
+ #include <QtGui/qscreen.h>
+ #include <qpa/qplatformscreen.h>
+ 
++#if QT_CONFIG(egl)
++#  include "qwindowseglcontext.h"
++#endif
++
+ QT_BEGIN_NAMESPACE
+ 
+ enum ResourceType {
+     RenderingContextType,
++#if QT_CONFIG(egl)
++    EglContextType,
++    EglDisplayType,
++    EglConfigType,
++#endif
+     HandleType,
+     GlHandleType,
+     GetDCType,
+@@ -32,6 +41,11 @@ static int resourceType(const QByteArray &key)
+ {
+     static const char *names[] = { // match ResourceType
+         "renderingcontext",
++#if QT_CONFIG(egl)
++        "eglcontext",
++        "egldisplay",
++        "eglconfig",
++#endif
+         "handle",
+         "glhandle",
+         "getdc",
+@@ -127,6 +141,23 @@ void *QWindowsNativeInterface::nativeResourceForContext(const QByteArray &resour
+         return nullptr;
+     }
+ 
++#  if QT_CONFIG(egl)
++    auto *eglcontext = dynamic_cast<QWindowsEGLContext *>(context->handle());
++    if (eglcontext) {
++        switch (resourceType(resource)) {
++        case RenderingContextType: // Fall through.
++        case EglContextType:
++            return eglcontext->nativeContext();
++        case EglDisplayType:
++            return eglcontext->display();
++        case EglConfigType:
++            return eglcontext->config();
++        default:
++            break;
++        }
++    }
++#  endif
++
+     qWarning("%s: Invalid key '%s' requested.", __FUNCTION__, resource.constData());
+     return nullptr;
+ }
+diff --git a/src/plugins/platforms/windows/qwindowsopenglcontext.h b/src/plugins/platforms/windows/qwindowsopenglcontext.h
+index a2bac67e..522478b1 100644
+--- a/src/plugins/platforms/windows/qwindowsopenglcontext.h
++++ b/src/plugins/platforms/windows/qwindowsopenglcontext.h
+@@ -22,14 +22,18 @@ public:
+     virtual ~QWindowsStaticOpenGLContext() = default;
+ 
+     virtual QWindowsOpenGLContext *createContext(QOpenGLContext *context) = 0;
+-    virtual QWindowsOpenGLContext *createContext(HGLRC context, HWND window) = 0;
+     virtual void *moduleHandle() const = 0;
+     virtual QOpenGLContext::OpenGLModuleType moduleType() const = 0;
+     virtual bool supportsThreadedOpenGL() const { return false; }
+ 
+     // If the windowing system interface needs explicitly created window surfaces (like EGL),
+     // reimplement these.
+-    virtual void *createWindowSurface(void * /*nativeWindow*/, void * /*nativeConfig*/, int * /*err*/) { return nullptr; }
++    virtual void *createWindowSurface(void * /*nativeWindow*/, void * /*nativeConfig*/,
++                                      const QColorSpace & /*colorSpace*/,
++                                      int * /*err*/)
++    {
++        return nullptr;
++    }
+     virtual void destroyWindowSurface(void * /*nativeSurface*/) { }
+ 
+ protected:
+@@ -42,12 +46,6 @@ private:
+ class QWindowsOpenGLContext : public QPlatformOpenGLContext
+ {
+     Q_DISABLE_COPY_MOVE(QWindowsOpenGLContext)
+-public:
+-    // These should be implemented only for some winsys interfaces, for example EGL.
+-    // For others, like WGL, they are not relevant.
+-    virtual void *nativeDisplay() const { return nullptr; }
+-    virtual void *nativeConfig() const { return 0; }
+-
+ protected:
+     QWindowsOpenGLContext() = default;
+ };
+diff --git a/src/plugins/platforms/windows/qwindowsopengltester.cpp b/src/plugins/platforms/windows/qwindowsopengltester.cpp
+index a4abb489..25d4594d 100644
+--- a/src/plugins/platforms/windows/qwindowsopengltester.cpp
++++ b/src/plugins/platforms/windows/qwindowsopengltester.cpp
+@@ -197,19 +197,49 @@ QVariant GpuDescription::toVariant() const
+     return result;
+ }
+ 
++QWindowsOpenGLTester::Renderer QWindowsOpenGLTester::requestedGlesRenderer()
++{
++#if QT_CONFIG(egl)
++    const char platformVar[] = "QT_ANGLE_PLATFORM";
++    if (qEnvironmentVariableIsSet(platformVar)) {
++        const QByteArray anglePlatform = qgetenv(platformVar);
++        if (anglePlatform == "opengl")
++            return QWindowsOpenGLTester::AngleRendererOpenGL;
++        if (anglePlatform == "d3d11on12")
++            return QWindowsOpenGLTester::AngleRendererD3d11On12;
++        if (anglePlatform == "d3d11")
++            return QWindowsOpenGLTester::AngleRendererD3d11;
++        if (anglePlatform == "d3d9")
++            return QWindowsOpenGLTester::AngleRendererD3d9;
++        if (anglePlatform == "warp")
++            return QWindowsOpenGLTester::AngleRendererD3d11Warp;
++        qCWarning(lcQpaGl) << "Invalid value set for " << platformVar << ": " << anglePlatform;
++    }
++#endif
++    return QWindowsOpenGLTester::InvalidRenderer;
++}
++
+ QWindowsOpenGLTester::Renderer QWindowsOpenGLTester::requestedRenderer()
+ {
+     const char openGlVar[] = "QT_OPENGL";
+-    if (QCoreApplication::testAttribute(Qt::AA_UseOpenGLES))
+-        qWarning("Qt::AA_UseOpenGLES is no longer supported in Qt 6");
++#if QT_CONFIG(egl)
++    if (QCoreApplication::testAttribute(Qt::AA_UseOpenGLES)) {
++        const Renderer glesRenderer = QWindowsOpenGLTester::requestedGlesRenderer();
++        return glesRenderer != InvalidRenderer ? glesRenderer : Gles;
++    }
++#endif
+     if (QCoreApplication::testAttribute(Qt::AA_UseDesktopOpenGL))
+         return QWindowsOpenGLTester::DesktopGl;
+     if (QCoreApplication::testAttribute(Qt::AA_UseSoftwareOpenGL))
+         return QWindowsOpenGLTester::SoftwareRasterizer;
+     if (qEnvironmentVariableIsSet(openGlVar)) {
+         const QByteArray requested = qgetenv(openGlVar);
+-        if (requested == "angle")
+-            qWarning("QT_OPENGL=angle is no longer supported in Qt 6");
++#if QT_CONFIG(egl)
++        if (requested == "angle") {
++            const Renderer glesRenderer = QWindowsOpenGLTester::requestedGlesRenderer();
++            return glesRenderer != InvalidRenderer ? glesRenderer : Gles;
++        }
++#endif
+         if (requested == "desktop")
+             return QWindowsOpenGLTester::DesktopGl;
+         if (requested == "software")
+@@ -253,10 +283,22 @@ QWindowsOpenGLTester::Renderers QWindowsOpenGLTester::detectSupportedRenderers(c
+     if (it != srCache->cend())
+         return *it;
+ 
++#  if QT_CONFIG(egl)
++    QWindowsOpenGLTester::Renderers result(
++            QWindowsOpenGLTester::AngleRendererD3d11 | QWindowsOpenGLTester::AngleRendererD3d9
++            | QWindowsOpenGLTester::AngleRendererD3d11Warp
++            | QWindowsOpenGLTester::AngleRendererD3d11On12
++            | QWindowsOpenGLTester::AngleRendererOpenGL | QWindowsOpenGLTester::SoftwareRasterizer);
++#  else
+     QWindowsOpenGLTester::Renderers result(QWindowsOpenGLTester::SoftwareRasterizer);
++#  endif
+ 
+     // Don't test for GL if explicitly requested or GLES only is requested
++#  if QT_CONFIG(egl)
++    if (requested == DesktopGl || ((requested & GlesMask) == 0 && testDesktopGL()))
++#  else
+     if (requested == DesktopGl || testDesktopGL())
++#  endif
+         result |= QWindowsOpenGLTester::DesktopGl;
+ 
+     QSet<QString> features; // empty by default -> nothing gets disabled
+@@ -276,6 +318,25 @@ QWindowsOpenGLTester::Renderers QWindowsOpenGLTester::detectSupportedRenderers(c
+         qCDebug(lcQpaGl) << "Disabling Desktop GL: " << gpu;
+         result &= ~QWindowsOpenGLTester::DesktopGl;
+     }
++#  if QT_CONFIG(egl)
++    if (features.contains(QStringLiteral("disable_angle"))) { // Qt-specific keyword
++        qCDebug(lcQpaGl) << "Disabling ANGLE: " << gpu;
++        result &= ~QWindowsOpenGLTester::GlesMask;
++    } else {
++        if (features.contains(QStringLiteral("disable_d3d11on12"))) { // standard keyword
++            qCDebug(lcQpaGl) << "Disabling D3D11 on 12: " << gpu;
++            result &= ~QWindowsOpenGLTester::AngleRendererD3d11On12;
++        }
++        if (features.contains(QStringLiteral("disable_d3d11"))) { // standard keyword
++            qCDebug(lcQpaGl) << "Disabling D3D11: " << gpu;
++            result &= ~QWindowsOpenGLTester::AngleRendererD3d11;
++        }
++        if (features.contains(QStringLiteral("disable_d3d9"))) { // Qt-specific
++            qCDebug(lcQpaGl) << "Disabling D3D9: " << gpu;
++            result &= ~QWindowsOpenGLTester::AngleRendererD3d9;
++        }
++    }
++#  endif
+     if (features.contains(QStringLiteral("disable_rotation"))) {
+         qCDebug(lcQpaGl) << "Disabling rotation: " << gpu;
+         result |= DisableRotationFlag;
+diff --git a/src/plugins/platforms/windows/qwindowsopengltester.h b/src/plugins/platforms/windows/qwindowsopengltester.h
+index db17a959..f0075ec0 100644
+--- a/src/plugins/platforms/windows/qwindowsopengltester.h
++++ b/src/plugins/platforms/windows/qwindowsopengltester.h
+@@ -42,6 +42,14 @@ public:
+     enum Renderer {
+         InvalidRenderer         = 0x0000,
+         DesktopGl               = 0x0001,
++        AngleRendererD3d11      = 0x0002,
++        AngleRendererD3d9       = 0x0004,
++        AngleRendererD3d11Warp  = 0x0008, // "Windows Advanced Rasterization Platform",
++        AngleRendererD3d11On12  = 0x0040,
++        AngleRendererOpenGL     = 0x0080,
++        AngleBackendMask        = AngleRendererD3d11 | AngleRendererD3d9 | AngleRendererD3d11Warp | AngleRendererD3d11On12 | AngleRendererOpenGL,
++        Gles                    = 0x0010, // ANGLE
++        GlesMask                = Gles | AngleBackendMask,
+         SoftwareRasterizer      = 0x0020,
+         RendererMask            = 0x00FF,
+         DisableRotationFlag     = 0x0100,
+@@ -49,6 +57,7 @@ public:
+     };
+     Q_DECLARE_FLAGS(Renderers, Renderer)
+ 
++    static Renderer requestedGlesRenderer();
+     static Renderer requestedRenderer();
+ 
+     static QWindowsOpenGLTester::Renderers  supportedRenderers(Renderer requested);
+diff --git a/src/plugins/platforms/windows/qwindowswindow.cpp b/src/plugins/platforms/windows/qwindowswindow.cpp
+index a083c0ae..cc1aee77 100644
+--- a/src/plugins/platforms/windows/qwindowswindow.cpp
++++ b/src/plugins/platforms/windows/qwindowswindow.cpp
+@@ -15,11 +15,7 @@
+ #include "qwindowsintegration.h"
+ #include "qwindowsmenu.h"
+ #include "qwindowsnativeinterface.h"
+-#if QT_CONFIG(dynamicgl)
+-#  include "qwindowsglcontext.h"
+-#else
+-#  include "qwindowsopenglcontext.h"
+-#endif
++#include "qwindowsglcontext.h"
+ #include "qwindowsopengltester.h"
+ #ifdef QT_NO_CURSOR
+ #  include "qwindowscursor.h"
+@@ -2527,12 +2523,8 @@ void QWindowsWindow::releaseDC()
+ 
+ static inline bool isSoftwareGl()
+ {
+-#if QT_CONFIG(dynamicgl)
+     return QOpenGLStaticContext::opengl32.moduleIsNotOpengl32()
+         && QOpenGLContext::openGLModuleType() == QOpenGLContext::LibGL;
+-#else
+-    return false;
+-#endif // dynamicgl
+ }
+ 
+ bool QWindowsWindow::handleWmPaint(HWND hwnd, UINT message,
+@@ -3954,8 +3946,11 @@ void *QWindowsWindow::surface(void *nativeConfig, int *err)
+ #endif
+ #ifndef QT_NO_OPENGL
+     if (!m_surface) {
+-        if (QWindowsStaticOpenGLContext *staticOpenGLContext = QWindowsIntegration::staticOpenGLContext())
+-            m_surface = staticOpenGLContext->createWindowSurface(m_data.hwnd, nativeConfig, err);
++        if (QWindowsStaticOpenGLContext *staticOpenGLContext =
++                    QWindowsIntegration::staticOpenGLContext()) {
++            m_surface = staticOpenGLContext->createWindowSurface(
++                    m_data.hwnd, nativeConfig, window()->requestedFormat().colorSpace(), err);
++        }
+     }
+ 
+     return m_surface;
+diff --git a/src/widgets/kernel/qwidget.cpp b/src/widgets/kernel/qwidget.cpp
+index 062539d4..979833d0 100644
+--- a/src/widgets/kernel/qwidget.cpp
++++ b/src/widgets/kernel/qwidget.cpp
+@@ -109,6 +109,8 @@ extern bool qt_sendSpontaneousEvent(QObject*, QEvent*); // qapplication.cpp
+ static void setAttribute_internal(Qt::WidgetAttribute attribute,
+     bool on, QWidgetData *data, QWidgetPrivate *d);
+ 
++int QWidgetPrivate::prefillRhiSurface = -1;
++
+ QWidgetPrivate::QWidgetPrivate(decltype(QObjectPrivateVersion) version)
+     : QObjectPrivate(version)
+       , focus_next(nullptr)
+@@ -178,6 +180,11 @@ QWidgetPrivate::QWidgetPrivate(decltype(QObjectPrivateVersion) version)
+     static int count = 0;
+     qDebug() << "widgets" << ++count;
+ #endif
++
++    if (prefillRhiSurface < 0) {
++        prefillRhiSurface = qEnvironmentVariableIntValue("QT_PREFILL_RHI_SURFACE");
++        qInfo() << "INFO: prefill qrhi surface:" << prefillRhiSurface;
++    }
+ }
+ 
+ 
+@@ -1392,6 +1399,11 @@ void QWidgetPrivate::create()
+         // Trigger creation of support infrastructure up front,
+         // now that we have a specific RHI configuration.
+         q->backingStore()->handle()->createRhi(win, rhiConfig);
++
++        if (prefillRhiSurface) {
++            const QColor clearColor = q->palette().color(q->backgroundRole());
++            q->backingStore()->handle()->rhiClear(win, clearColor);
++        }
+     }
+ 
+     setWindowModified_helper();
+diff --git a/src/widgets/kernel/qwidget_p.h b/src/widgets/kernel/qwidget_p.h
+index 2d67b9a2..123b8cd1 100644
+--- a/src/widgets/kernel/qwidget_p.h
++++ b/src/widgets/kernel/qwidget_p.h
+@@ -798,6 +798,8 @@ public:
+     bool stealKeyboardGrab(bool grab);
+     bool stealMouseGrab(bool grab);
+     bool hasChildWithFocusPolicy(Qt::FocusPolicy policy, const QWidget *excludeChildrenOf = nullptr) const;
++
++    static int prefillRhiSurface;
+ };
+ 
+ Q_DECLARE_OPERATORS_FOR_FLAGS(QWidgetPrivate::DrawWidgetFlags)
+diff --git a/src/widgets/kernel/qwidgetwindow.cpp b/src/widgets/kernel/qwidgetwindow.cpp
+index 4d56b26c..f4df1216 100644
+--- a/src/widgets/kernel/qwidgetwindow.cpp
++++ b/src/widgets/kernel/qwidgetwindow.cpp
+@@ -864,6 +864,21 @@ void QWidgetWindow::handleMoveEvent(QMoveEvent *event)
+ 
+ void QWidgetWindow::handleResizeEvent(QResizeEvent *event)
+ {
++    Q_D(QWidgetWindow);
++
++    if (m_widget->d_func()->prefillRhiSurface) {
++        /**
++         * For modal dialogs we can receive resizes before the widget has actually been
++         * exposed. In such a case we should clear the internal texture with the background
++         * color
++         */
++        if (!d->receivedExpose && m_widget->backingStore()
++            && m_widget->backingStore()->handle()->rhi(this)) {
++            const QColor clearColor = m_widget->palette().color(m_widget->backgroundRole());
++            m_widget->backingStore()->handle()->rhiClear(this, clearColor);
++        }
++    }
++
+     auto oldRect = m_widget->rect();
+ 
+     if (updateSize()) {

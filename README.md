@@ -38,7 +38,7 @@ is a separate change on top.
 | 0001 | 39 | Windows 7 backport, from [qr243vbi/qt6windows7](https://github.com/qr243vbi/qt6windows7) |
 | 0002 | 1 | DirectComposition on Windows 7 path, with `FLIP_SEQUENTIAL` |
 | 0003 | 1 | 6.11 `notifyRoleChange` UI Automation call routed through wrapper |
-| 0004 | 38 | ANGLE OpenGL ES and EGL backend, from [dimula73/qtbase](https://github.com/dimula73/qtbase) `for-krita/6.11.0` |
+| 0004 | 40 | ANGLE OpenGL ES and EGL backend, from [dimula73/qtbase](https://github.com/dimula73/qtbase) `for-krita/6.11.0`, minus its env-gated resize experiments |
 | 0005 | 1 | ANGLE entry points resolved statically, so `libEGL.dll` and `libGLESv2.dll` are not shipped |
 | 0006 | 1 | Render-to-texture hole clipped to repainted region, also from Krita fork |
 
