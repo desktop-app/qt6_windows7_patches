@@ -1,0 +1,30 @@
+From ae2d2ec97b3d7832cc80d051b1ebc4cc25827b7f Mon Sep 17 00:00:00 2001
+From: 23rd <23rd@vivaldi.net>
+Date: Fri, 28 Aug 2026 10:55:42 +0000
+Subject: [PATCH 6/6] Added clipping of render-to-texture hole to repainted
+ region.
+
+---
+ src/widgets/kernel/qwidget.cpp | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/widgets/kernel/qwidget.cpp b/src/widgets/kernel/qwidget.cpp
+index 979833d0..3b69083d 100644
+--- a/src/widgets/kernel/qwidget.cpp
++++ b/src/widgets/kernel/qwidget.cpp
+@@ -5639,6 +5639,7 @@ void QWidgetPrivate::drawWidget(QPaintDevice *pdev, const QRegion &rgn, const QP
+                 beginBackingStorePainting();
+                 if (!q->testAttribute(Qt::WA_AlwaysStackOnTop) && repaintManager) {
+                     QPainter p(q);
++                    p.setClipRegion(toBePainted);
+                     p.setCompositionMode(QPainter::CompositionMode_Source);
+                     p.fillRect(q->rect(), Qt::transparent);
+                 } else if (!repaintManager) {
+@@ -5649,6 +5650,7 @@ void QWidgetPrivate::drawWidget(QPaintDevice *pdev, const QRegion &rgn, const QP
+                     if (img.format() == QImage::Format_RGB32)
+                         img.reinterpretAsFormat(QImage::Format_ARGB32_Premultiplied);
+                     QPainter p(q);
++                    p.setClipRegion(toBePainted);
+                     p.drawImage(q->rect(), img);
+                     skipPaintEvent = true;
+                 }
