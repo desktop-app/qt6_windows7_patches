@@ -1,0 +1,135 @@
+From 35f5b0c177321d5c5b9b191355ff7cb8305dbf72 Mon Sep 17 00:00:00 2001
+From: 23rd <23rd@vivaldi.net>
+Date: Fri, 28 Aug 2026 10:55:40 +0000
+Subject: [PATCH 5/6] Resolved ANGLE entry points statically to drop libEGL and
+ libGLESv2.
+
+---
+ .../platforms/windows/qwindowseglcontext.cpp  | 93 +++++++++----------
+ 1 file changed, 43 insertions(+), 50 deletions(-)
+
+diff --git a/src/plugins/platforms/windows/qwindowseglcontext.cpp b/src/plugins/platforms/windows/qwindowseglcontext.cpp
+index 35b2466a..2eb47832 100644
+--- a/src/plugins/platforms/windows/qwindowseglcontext.cpp
++++ b/src/plugins/platforms/windows/qwindowseglcontext.cpp
+@@ -128,41 +128,39 @@ void *QWindowsLibEGL::resolve(const char *name)
+ 
+ #define RESOLVE(name) name = GETPROC(name)
+ 
++// ANGLE is linked statically here, so there is no libEGL/libGLESv2 to load:
++// every entry point resolves through ANGLE's own EGL_GetProcAddress.
++extern "C" __eglMustCastToProperFunctionPointerType EGLAPIENTRY
++EGL_GetProcAddress(const char *procname);
++
+ bool QWindowsLibEGL::init()
+ {
+-    static constexpr LPCWSTR dllName{ L"libEGL" };
+-
+-    qCDebug(lcQpaGl) << "Qt: Using EGL from" << dllName;
+-
+-    m_lib = ::LoadLibraryW(dllName);
+-    if (!m_lib) {
+-        qErrnoWarning(::GetLastError(), "Failed to load %s", dllName);
+-        return false;
+-    }
+-
+-    RESOLVE(eglGetError);
+-    RESOLVE(eglGetDisplay);
+-    RESOLVE(eglInitialize);
+-    RESOLVE(eglTerminate);
+-    RESOLVE(eglChooseConfig);
+-    RESOLVE(eglGetConfigAttrib);
+-    RESOLVE(eglQueryContext);
+-    RESOLVE(eglCreateWindowSurface);
+-    RESOLVE(eglCreatePbufferSurface);
+-    RESOLVE(eglDestroySurface);
+-    RESOLVE(eglBindAPI);
+-    RESOLVE(eglSwapInterval);
+-    RESOLVE(eglCreateContext);
+-    RESOLVE(eglDestroyContext);
+-    RESOLVE(eglMakeCurrent);
+-    RESOLVE(eglGetCurrentContext);
+-    RESOLVE(eglGetCurrentSurface);
+-    RESOLVE(eglGetCurrentDisplay);
+-    RESOLVE(eglSwapBuffers);
+-    RESOLVE(eglQueryString);
+-    RESOLVE(eglWaitNative);
+-    RESOLVE(eglSurfaceAttrib);
+-    RESOLVE(eglGetProcAddress);
++    m_lib = nullptr;
++    eglGetProcAddress = reinterpret_cast<decltype(eglGetProcAddress)>(&::EGL_GetProcAddress);
++
++#define RESOLVE_EGL(name) name = reinterpret_cast<decltype(name)>(eglGetProcAddress(#name))
++    RESOLVE_EGL(eglGetError);
++    RESOLVE_EGL(eglGetDisplay);
++    RESOLVE_EGL(eglInitialize);
++    RESOLVE_EGL(eglTerminate);
++    RESOLVE_EGL(eglChooseConfig);
++    RESOLVE_EGL(eglGetConfigAttrib);
++    RESOLVE_EGL(eglQueryContext);
++    RESOLVE_EGL(eglCreateWindowSurface);
++    RESOLVE_EGL(eglCreatePbufferSurface);
++    RESOLVE_EGL(eglDestroySurface);
++    RESOLVE_EGL(eglBindAPI);
++    RESOLVE_EGL(eglSwapInterval);
++    RESOLVE_EGL(eglCreateContext);
++    RESOLVE_EGL(eglDestroyContext);
++    RESOLVE_EGL(eglMakeCurrent);
++    RESOLVE_EGL(eglGetCurrentContext);
++    RESOLVE_EGL(eglGetCurrentSurface);
++    RESOLVE_EGL(eglGetCurrentDisplay);
++    RESOLVE_EGL(eglSwapBuffers);
++    RESOLVE_EGL(eglQueryString);
++    RESOLVE_EGL(eglWaitNative);
++    RESOLVE_EGL(eglSurfaceAttrib);
+ 
+     if (!eglGetError || !eglGetDisplay || !eglInitialize || !eglGetProcAddress || !eglQueryString)
+         return false;
+@@ -171,11 +169,10 @@ bool QWindowsLibEGL::init()
+     eglDebugMessageControlKHR = nullptr;
+ 
+ #ifdef EGL_ANGLE_platform_angle
+-
+-    eglGetPlatformDisplayEXT = reinterpret_cast<decltype(eglGetPlatformDisplayEXT)>(
+-            eglGetProcAddress("eglGetPlatformDisplayEXT"));
+-    RESOLVE(eglDebugMessageControlKHR);
++    RESOLVE_EGL(eglGetPlatformDisplayEXT);
++    RESOLVE_EGL(eglDebugMessageControlKHR);
+ #endif
++#undef RESOLVE_EGL
+ 
+     return true;
+ }
+@@ -187,23 +184,19 @@ void *QWindowsLibGLESv2::resolve(const char *name)
+ 
+ bool QWindowsLibGLESv2::init()
+ {
+-    static constexpr LPCWSTR dllName{ L"libGLESv2" };
+-
+-    qCDebug(lcQpaGl) << "Qt: Using OpenGL ES 2.0 from" << dllName;
+-
+-    m_lib = ::LoadLibraryW(dllName);
+-    if (!m_lib) {
+-        qErrnoWarning(int(GetLastError()), "Failed to load %s", dllName);
+-        return false;
+-    }
++    // Static ANGLE: GLES entry points live in the executable itself. Report the
++    // executable module as the "GLESv2 module" and resolve via EGL_GetProcAddress.
++    m_lib = ::GetModuleHandleW(nullptr);
+ 
+     void(APIENTRY * glBindTexture)(GLenum target, GLuint texture){ nullptr };
+     GLuint(APIENTRY * glCreateShader)(GLenum type){ nullptr };
+     void(APIENTRY * glClearDepthf)(GLclampf depth){ nullptr };
+-    RESOLVE(glBindTexture);
+-    RESOLVE(glCreateShader);
+-    RESOLVE(glClearDepthf);
+-    RESOLVE(glGetString);
++#define RESOLVE_GLES(name) name = reinterpret_cast<decltype(name)>(::EGL_GetProcAddress(#name))
++    RESOLVE_GLES(glBindTexture);
++    RESOLVE_GLES(glCreateShader);
++    RESOLVE_GLES(glClearDepthf);
++    RESOLVE_GLES(glGetString);
++#undef RESOLVE_GLES
+ 
+     return glBindTexture && glCreateShader && glClearDepthf;
+ }
