@@ -1,0 +1,23 @@
+From 51db855a453a25898d506a65089192b60644fd76 Mon Sep 17 00:00:00 2001
+From: 23rd <23rd@vivaldi.net>
+Date: Fri, 28 Aug 2026 10:55:32 +0000
+Subject: [PATCH 3/6] Fixed notifyRoleChange calling UI Automation directly on
+ Windows 7.
+
+---
+ .../platforms/windows/uiautomation/qwindowsuiamainprovider.cpp  | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/plugins/platforms/windows/uiautomation/qwindowsuiamainprovider.cpp b/src/plugins/platforms/windows/uiautomation/qwindowsuiamainprovider.cpp
+index a6b452b1..5c4407e2 100644
+--- a/src/plugins/platforms/windows/uiautomation/qwindowsuiamainprovider.cpp
++++ b/src/plugins/platforms/windows/uiautomation/qwindowsuiamainprovider.cpp
+@@ -184,7 +184,7 @@ void QWindowsUiaMainProvider::notifyRoleChange(QAccessibleEvent *event)
+         if (auto provider = providerForAccessible(accessible)) {
+             QComVariant oldVal;
+             QComVariant newVal{ roleToControlTypeId(accessible->role()) };
+-            UiaRaiseAutomationPropertyChangedEvent(provider.Get(), UIA_ControlTypePropertyId,
++            QWindowsUiaWrapper::instance()->raiseAutomationPropertyChangedEvent(provider.Get(), UIA_ControlTypePropertyId,
+                                                    oldVal.get(), newVal.get());
+         }
+     }
