@@ -1,7 +1,7 @@
 From b672124be7b3ca85601a56b258ea654d63967cb1 Mon Sep 17 00:00:00 2001
 From: 23rd <23rd@vivaldi.net>
 Date: Fri, 28 Aug 2026 10:55:24 +0000
-Subject: [PATCH 1/6] Added Windows 7 backport from qt6windows7.
+Subject: [PATCH 1/7] Added Windows 7 backport from qt6windows7.
 
 ---
  src/corelib/CMakeLists.txt                    |   4 +-
@@ -2788,3 +2788,6 @@ index 9b9f28cb..fa116e6e 100644
  
      default:
          break;
+-- 
+2.53.0.windows.2
+

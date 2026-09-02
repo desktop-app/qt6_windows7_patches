@@ -1,7 +1,7 @@
 From 35f5b0c177321d5c5b9b191355ff7cb8305dbf72 Mon Sep 17 00:00:00 2001
 From: 23rd <23rd@vivaldi.net>
 Date: Fri, 28 Aug 2026 10:55:40 +0000
-Subject: [PATCH 5/6] Resolved ANGLE entry points statically to drop libEGL and
+Subject: [PATCH 5/7] Resolved ANGLE entry points statically to drop libEGL and
  libGLESv2.
 
 ---
@@ -133,3 +133,6 @@ index 35b2466a..2eb47832 100644
  
      return glBindTexture && glCreateShader && glClearDepthf;
  }
+-- 
+2.53.0.windows.2
+

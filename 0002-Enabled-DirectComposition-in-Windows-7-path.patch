@@ -1,7 +1,7 @@
 From 6767394bc34ebe75eba53352299acb5f3f2fa735 Mon Sep 17 00:00:00 2001
 From: 23rd <23rd@vivaldi.net>
 Date: Fri, 28 Aug 2026 10:55:27 +0000
-Subject: [PATCH 2/6] Enabled DirectComposition in Windows 7 path.
+Subject: [PATCH 2/7] Enabled DirectComposition in Windows 7 path.
 
 ---
  src/gui/rhi/qrhid3d11.cpp | 72 ++++++++++++++++++++++++++++++++-------
@@ -130,3 +130,6 @@ index e7182d6b..eb7643d0 100644
  
      } else { // Resizing existing swap chain
          releaseBuffers();
+-- 
+2.53.0.windows.2
+

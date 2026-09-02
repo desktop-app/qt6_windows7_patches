@@ -1,0 +1,39 @@
+From 72ad9c5f03cdf1e5cf89fbad3a1ca9378144ce6e Mon Sep 17 00:00:00 2001
+From: 23rd <23rd@vivaldi.net>
+Date: Wed, 2 Sep 2026 15:13:53 +0000
+Subject: [PATCH 7/7] Fixed opaque flip swap chains blocking Present in Windows
+ 7 path.
+
+---
+ src/gui/rhi/qrhid3d11.cpp | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/src/gui/rhi/qrhid3d11.cpp b/src/gui/rhi/qrhid3d11.cpp
+index eb7643d0..bf185600 100644
+--- a/src/gui/rhi/qrhid3d11.cpp
++++ b/src/gui/rhi/qrhid3d11.cpp
+@@ -5313,7 +5313,9 @@ bool QD3D11SwapChain::createOrResizeWin7()
+     HRESULT hr;
+ 
+     const bool needsAlpha = m_flags.testFlag(SurfaceHasPreMulAlpha) || m_flags.testFlag(SurfaceHasNonPreMulAlpha);
+-    bool canUseFlipModel = true;
++    // Flip model gets promoted to independent flip where Present blocks on
++    // vblank, blit (DISCARD) model never does, so flip is only for alpha.
++    bool canUseFlipModel = needsAlpha;
+ 
+     // Try DirectComposition for alpha transparency (available on Win8+).
+     // On actual Win7, DirectComposition is not available, so alpha will not work.
+@@ -5343,9 +5345,8 @@ bool QD3D11SwapChain::createOrResizeWin7()
+         canUseFlipModel = false;
+ 
+     swapInterval = m_flags.testFlag(QRhiSwapChain::NoVSync) ? 0 : 1;
++    // No ALLOW_TEARING: blit chain cannot tear, flip chain falls back to vsync.
+     swapChainFlags = 0;
+-    if (swapInterval == 0 && canUseFlipModel && rhiD->supportsAllowTearing)
+-        swapChainFlags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
+ 
+     if (!swapChain) { // First-time creation
+         HWND hwnd = reinterpret_cast<HWND>(window->winId());
+-- 
+2.53.0.windows.2
+

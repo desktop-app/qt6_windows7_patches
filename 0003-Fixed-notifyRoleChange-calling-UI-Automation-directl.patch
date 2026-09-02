@@ -1,7 +1,7 @@
 From 51db855a453a25898d506a65089192b60644fd76 Mon Sep 17 00:00:00 2001
 From: 23rd <23rd@vivaldi.net>
 Date: Fri, 28 Aug 2026 10:55:32 +0000
-Subject: [PATCH 3/6] Fixed notifyRoleChange calling UI Automation directly on
+Subject: [PATCH 3/7] Fixed notifyRoleChange calling UI Automation directly on
  Windows 7.
 
 ---
@@ -21,3 +21,6 @@ index a6b452b1..5c4407e2 100644
                                                     oldVal.get(), newVal.get());
          }
      }
+-- 
+2.53.0.windows.2
+

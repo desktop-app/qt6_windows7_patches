@@ -1,7 +1,7 @@
 From fd76db95cc33a32ffcae397705147c76b0bc639f Mon Sep 17 00:00:00 2001
 From: 23rd <23rd@vivaldi.net>
 Date: Fri, 28 Aug 2026 10:55:36 +0000
-Subject: [PATCH 4/6] Added ANGLE OpenGL ES and EGL backend from Krita fork.
+Subject: [PATCH 4/7] Added ANGLE OpenGL ES and EGL backend from Krita fork.
 
 ---
  .../find-modules/FindEGL.cmake                | 102 +--
@@ -2674,3 +2674,6 @@ index 4d56b26c..f4df1216 100644
      auto oldRect = m_widget->rect();
  
      if (updateSize()) {
+-- 
+2.53.0.windows.2
+
