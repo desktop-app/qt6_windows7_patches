@@ -42,6 +42,7 @@ is a separate change on top. Nothing here duplicates `qtbase_6.11.2` patches, th
 | 0006 | 1 | Render-to-texture hole clipped to repainted region, also from Krita fork |
 | 0007 | 1 | Opaque windows on blit (DISCARD) swap chain so Present never blocks, same as `qtbase_6.11.2` change for stock path |
 | 0008 | 10 | ANGLE device-loss and resource recovery ported from our Qt 5 patches |
+| 0009 | 2 | GPU driver exclusions preserved when selecting ANGLE backends |
 
 ## What it does
 
