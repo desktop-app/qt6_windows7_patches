@@ -10,16 +10,15 @@ git clone https://github.com/desktop-app/qt6_windows7_patches.git qt6_windows7
 ```
 
 ```
-win:
-    if exist "..\..\patches\qt6_windows7" (
-        for %%i in (..\..\patches\qt6_windows7\*.patch) do (
-            git apply %%i --ignore-whitespace -v
-            if errorlevel 1 (
-                echo ERROR: Applying patch %%~nxi failed!
-                exit /b 1
-            )
+win32_win64:
+    for %%i in (..\..\qt6_windows7\*.patch) do (
+        git apply %%i --ignore-whitespace -v
+        if errorlevel 1 (
+            echo ERROR: Applying patch %%~nxi failed!
+            exit /b 1
         )
     )
+win:
     for /r %%i in (..\..\patches\qtbase_%QT%\*) do (
         git apply %%i --ignore-whitespace -v
         ...
@@ -42,6 +41,7 @@ is a separate change on top. Nothing here duplicates `qtbase_6.11.2` patches, th
 | 0005 | 1 | ANGLE entry points resolved statically, so `libEGL.dll` and `libGLESv2.dll` are not shipped |
 | 0006 | 1 | Render-to-texture hole clipped to repainted region, also from Krita fork |
 | 0007 | 1 | Opaque windows on blit (DISCARD) swap chain so Present never blocks, same as `qtbase_6.11.2` change for stock path |
+| 0008 | 10 | ANGLE device-loss and resource recovery ported from our Qt 5 patches |
 
 ## What it does
 
