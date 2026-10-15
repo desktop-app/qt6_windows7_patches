@@ -44,6 +44,7 @@ is a separate change on top. Nothing here duplicates `qtbase_6.11.2` patches, th
 | 0008 | 10 | ANGLE device-loss and resource recovery ported from our Qt 5 patches |
 | 0009 | 2 | GPU driver exclusions preserved when selecting ANGLE backends |
 | 0010 | 1 | System DPI, metrics and font scaling preserved in legacy Windows shims |
+| 0011 | 1 | Backing-store presentation failures propagated to existing device-loss recovery |
 
 ## What it does
 
