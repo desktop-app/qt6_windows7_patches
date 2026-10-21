@@ -45,6 +45,7 @@ is a separate change on top. Nothing here duplicates `qtbase_6.11.2` patches, th
 | 0009 | 2 | GPU driver exclusions preserved when selecting ANGLE backends |
 | 0010 | 1 | System DPI, metrics and font scaling preserved in legacy Windows shims |
 | 0011 | 1 | ANGLE clear-surface resize and presentation failures propagated; normal flush is covered by common Qt patch 0064 |
+| 0014 | 1 | ANGLE clear-surface path rejects a failed swap-chain allocation |
 
 ## What it does
 
