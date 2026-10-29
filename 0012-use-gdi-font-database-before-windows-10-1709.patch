@@ -8,9 +8,12 @@ Subject: [PATCH] Fixed empty font database on Windows 10 builds before 1709.
  1 file changed, 6 insertions(+), 2 deletions(-)
 
 diff --git a/src/plugins/platforms/windows/qwindowsintegration.cpp b/src/plugins/platforms/windows/qwindowsintegration.cpp
+index 3d7b088b..026f9975 100644
 --- a/src/plugins/platforms/windows/qwindowsintegration.cpp
 +++ b/src/plugins/platforms/windows/qwindowsintegration.cpp
-@@ -486,7 +486,11 @@
+@@ -545,9 +545,13 @@ QPlatformFontDatabase *QWindowsIntegration::fontDatabase() const
+         /* IDWriteFontFace3 is only reportedly available starting with Windows 10. This change is necessary starting
+         with Qt 6.8, where DirectWrite is used by default to populate the font database. 
          More info: https://github.com/videolan/vlc/blob/master/contrib/src/qt/0001-Use-DirectWrite-font-database-only-with-Windows-10-a.patch
 -        */
  
@@ -24,6 +27,3 @@ diff --git a/src/plugins/platforms/windows/qwindowsintegration.cpp b/src/plugins
              !(d->m_options & (QWindowsIntegration::FontDatabaseGDI | QWindowsIntegration::DontUseDirectWriteFonts)))
              d->m_fontDatabase = new QWindowsDirectWriteFontDatabase;
          else
--- 
-2.54.0 (Apple Git-157)
-

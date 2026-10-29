@@ -7,10 +7,10 @@ The normal flush path is covered for every architecture by common patch
 0064-backport-rhi-compositor-failure-handling.patch; do not duplicate it here.
 
 diff --git a/src/gui/painting/qbackingstoredefaultcompositor.cpp b/src/gui/painting/qbackingstoredefaultcompositor.cpp
-index 07fe90d..35c0c0c 100644
+index 88842040..d37ae6f0 100644
 --- a/src/gui/painting/qbackingstoredefaultcompositor.cpp
 +++ b/src/gui/painting/qbackingstoredefaultcompositor.cpp
-@@ -485,8 +485,12 @@ QBackingStoreDefaultCompositor::clearSurface(QRhi *rhi,
+@@ -490,8 +490,12 @@ QBackingStoreDefaultCompositor::clearSurface(QRhi *rhi,
  
      QWindowPrivate::get(window)->lastComposeTime.start();
  
@@ -25,7 +25,7 @@ index 07fe90d..35c0c0c 100644
  
      // Start recording a new frame.
      QRhi::FrameOpResult frameResult = rhi->beginFrame(swapchain);
-@@ -520,7 +524,11 @@ QBackingStoreDefaultCompositor::clearSurface(QRhi *rhi,
+@@ -525,7 +529,11 @@ QBackingStoreDefaultCompositor::clearSurface(QRhi *rhi,
      } else
          render();
  

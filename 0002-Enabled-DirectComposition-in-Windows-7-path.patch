@@ -8,10 +8,10 @@ Subject: [PATCH 2/7] Enabled DirectComposition in Windows 7 path.
  1 file changed, 60 insertions(+), 12 deletions(-)
 
 diff --git a/src/gui/rhi/qrhid3d11.cpp b/src/gui/rhi/qrhid3d11.cpp
-index e7182d6b..eb7643d0 100644
+index ca9f100f..b6c6ffd4 100644
 --- a/src/gui/rhi/qrhid3d11.cpp
 +++ b/src/gui/rhi/qrhid3d11.cpp
-@@ -5312,9 +5312,35 @@ bool QD3D11SwapChain::createOrResizeWin7()
+@@ -5322,9 +5322,35 @@ bool QD3D11SwapChain::createOrResizeWin7()
      QRHI_RES_RHI(QRhiD3D11);
      HRESULT hr;
  
@@ -50,7 +50,7 @@ index e7182d6b..eb7643d0 100644
  
      swapInterval = m_flags.testFlag(QRhiSwapChain::NoVSync) ? 0 : 1;
      swapChainFlags = 0;
-@@ -5330,7 +5356,7 @@ bool QD3D11SwapChain::createOrResizeWin7()
+@@ -5340,7 +5366,7 @@ bool QD3D11SwapChain::createOrResizeWin7()
          bool flipModelAttempted = false;
          if (canUseFlipModel) {
              flipModelAttempted = true;
@@ -59,7 +59,7 @@ index e7182d6b..eb7643d0 100644
              IDXGIFactory2 *fac = static_cast<IDXGIFactory2 *>(rhiD->dxgiFactory);
              if (fac) {
                  DXGI_SWAP_CHAIN_DESC1 desc = {};
-@@ -5341,15 +5367,36 @@ bool QD3D11SwapChain::createOrResizeWin7()
+@@ -5351,15 +5377,36 @@ bool QD3D11SwapChain::createOrResizeWin7()
                  desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
                  desc.BufferCount = BUFFER_COUNT;
                  desc.Scaling = DXGI_SCALING_NONE;
@@ -100,7 +100,7 @@ index e7182d6b..eb7643d0 100644
              }
          }
  
-@@ -5358,8 +5405,8 @@ bool QD3D11SwapChain::createOrResizeWin7()
+@@ -5368,8 +5415,8 @@ bool QD3D11SwapChain::createOrResizeWin7()
                  qWarning("QRhiD3D11: Flip model swapchain creation failed, falling back to legacy discard model. This may happen on Windows 7 without the Platform Update.");
              
              // --- FALLBACK TO LEGACY DISCARD PATH (DXGI 1.1, works on all Win7) ---
@@ -111,7 +111,7 @@ index e7182d6b..eb7643d0 100644
  
              DXGI_SWAP_CHAIN_DESC desc = {};
              desc.BufferDesc.Width = UINT(pixelSize.width());
-@@ -5367,7 +5414,7 @@ bool QD3D11SwapChain::createOrResizeWin7()
+@@ -5377,7 +5424,7 @@ bool QD3D11SwapChain::createOrResizeWin7()
              desc.BufferDesc.Format = colorFormat;
              desc.SampleDesc.Count = 1;
              desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
@@ -120,7 +120,7 @@ index e7182d6b..eb7643d0 100644
              desc.OutputWindow = hwnd;
              desc.Windowed = TRUE;
              desc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
-@@ -5380,7 +5427,8 @@ bool QD3D11SwapChain::createOrResizeWin7()
+@@ -5390,7 +5437,8 @@ bool QD3D11SwapChain::createOrResizeWin7()
              return false;
          }
  
@@ -130,6 +130,3 @@ index e7182d6b..eb7643d0 100644
  
      } else { // Resizing existing swap chain
          releaseBuffers();
--- 
-2.53.0.windows.2
-

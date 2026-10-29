@@ -200,7 +200,7 @@ index a4aca843..5dc3092a 100644
 -    QMAKE_LFLAGS += $$QMAKE_LFLAGS_OPENGL
 -}
 diff --git a/src/gui/CMakeLists.txt b/src/gui/CMakeLists.txt
-index b04556eb..81a2f4b8 100644
+index f07a4ba8..2822350a 100644
 --- a/src/gui/CMakeLists.txt
 +++ b/src/gui/CMakeLists.txt
 @@ -358,7 +358,6 @@ qt_internal_extend_target(Gui CONDITION QT_FEATURE_standarditemmodel
@@ -242,7 +242,7 @@ index b04556eb..81a2f4b8 100644
      LIBRARIES
          EGL::EGL
  )
-@@ -911,7 +922,7 @@ qt_internal_extend_target(Gui CONDITION QT_FEATURE_opengles2
+@@ -913,7 +924,7 @@ qt_internal_extend_target(Gui CONDITION QT_FEATURE_opengles2
          opengl/qopengles2ext.h
  )
  
@@ -316,10 +316,10 @@ index db357641..7c7a8127 100644
  qt_configure_add_report_entry(
      TYPE WARNING
 diff --git a/src/gui/kernel/qopenglcontext.cpp b/src/gui/kernel/qopenglcontext.cpp
-index c50ec76c..2d07430a 100644
+index b6935151..ee578cce 100644
 --- a/src/gui/kernel/qopenglcontext.cpp
 +++ b/src/gui/kernel/qopenglcontext.cpp
-@@ -919,13 +919,11 @@ QScreen *QOpenGLContext::screen() const
+@@ -948,13 +948,11 @@ QScreen *QOpenGLContext::screen() const
   */
  QOpenGLContext::OpenGLModuleType QOpenGLContext::openGLModuleType()
  {
@@ -366,7 +366,7 @@ index ac13c426..d12dcfbd 100644
      virtual QFunctionPointer getProcAddress(const char *procName) = 0;
  
 diff --git a/src/gui/kernel/qsurfaceformat.cpp b/src/gui/kernel/qsurfaceformat.cpp
-index 2f46a72e..dfe116bb 100644
+index c1cb2303..b90c3d97 100644
 --- a/src/gui/kernel/qsurfaceformat.cpp
 +++ b/src/gui/kernel/qsurfaceformat.cpp
 @@ -196,6 +196,17 @@ public:
@@ -831,7 +831,7 @@ index 00000000..dba82e8a
 +QT_END_NAMESPACE
 \ No newline at end of file
 diff --git a/src/gui/opengl/platform/egl/qeglplatformcontext.cpp b/src/gui/opengl/platform/egl/qeglplatformcontext.cpp
-index d6493477..71f5bc05 100644
+index 3ec5afaf..929bb96c 100644
 --- a/src/gui/opengl/platform/egl/qeglplatformcontext.cpp
 +++ b/src/gui/opengl/platform/egl/qeglplatformcontext.cpp
 @@ -581,7 +581,7 @@ QFunctionPointer QEGLPlatformContext::getProcAddress(const char *procName)
@@ -844,10 +844,10 @@ index d6493477..71f5bc05 100644
      // dynamic linking there still has to be a way to access the
      // standard GLES functions. QOpenGL(Extra)Functions never makes
 diff --git a/src/gui/painting/qbackingstoredefaultcompositor.cpp b/src/gui/painting/qbackingstoredefaultcompositor.cpp
-index 293cfc6b..07fe90d3 100644
+index 696cad1e..88842040 100644
 --- a/src/gui/painting/qbackingstoredefaultcompositor.cpp
 +++ b/src/gui/painting/qbackingstoredefaultcompositor.cpp
-@@ -468,6 +468,63 @@ void QBackingStoreDefaultCompositor::ensureResources(QRhiResourceUpdateBatch *re
+@@ -473,6 +473,63 @@ void QBackingStoreDefaultCompositor::ensureResources(QRhiResourceUpdateBatch *re
          m_psPremulBlend.reset(createGraphicsPipeline(m_rhi, srb, rpDesc, PipelineBlend::PremulAlpha));
  }
  
@@ -1044,7 +1044,7 @@ index ec8efda2..d3c29786 100644
  
  #if QT_CONFIG(xcb)
 diff --git a/src/gui/rhi/qrhigles2.cpp b/src/gui/rhi/qrhigles2.cpp
-index 640be922..8cb46191 100644
+index 10fde5b2..416ffe3b 100644
 --- a/src/gui/rhi/qrhigles2.cpp
 +++ b/src/gui/rhi/qrhigles2.cpp
 @@ -1190,6 +1190,8 @@ bool QRhiGles2::create(QRhi::Flags flags)
@@ -2555,7 +2555,7 @@ index db17a959..f0075ec0 100644
  
      static QWindowsOpenGLTester::Renderers  supportedRenderers(Renderer requested);
 diff --git a/src/plugins/platforms/windows/qwindowswindow.cpp b/src/plugins/platforms/windows/qwindowswindow.cpp
-index a083c0ae..cc1aee77 100644
+index 85f70081..c838dc5a 100644
 --- a/src/plugins/platforms/windows/qwindowswindow.cpp
 +++ b/src/plugins/platforms/windows/qwindowswindow.cpp
 @@ -15,11 +15,7 @@
@@ -2571,7 +2571,7 @@ index a083c0ae..cc1aee77 100644
  #include "qwindowsopengltester.h"
  #ifdef QT_NO_CURSOR
  #  include "qwindowscursor.h"
-@@ -2527,12 +2523,8 @@ void QWindowsWindow::releaseDC()
+@@ -2546,12 +2542,8 @@ void QWindowsWindow::releaseDC()
  
  static inline bool isSoftwareGl()
  {
@@ -2584,7 +2584,7 @@ index a083c0ae..cc1aee77 100644
  }
  
  bool QWindowsWindow::handleWmPaint(HWND hwnd, UINT message,
-@@ -3954,8 +3946,11 @@ void *QWindowsWindow::surface(void *nativeConfig, int *err)
+@@ -4006,8 +3998,11 @@ void *QWindowsWindow::surface(void *nativeConfig, int *err)
  #endif
  #ifndef QT_NO_OPENGL
      if (!m_surface) {
@@ -2674,6 +2674,3 @@ index 4d56b26c..f4df1216 100644
      auto oldRect = m_widget->rect();
  
      if (updateSize()) {
--- 
-2.53.0.windows.2
-

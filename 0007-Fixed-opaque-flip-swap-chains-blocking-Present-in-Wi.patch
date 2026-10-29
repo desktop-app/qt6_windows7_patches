@@ -9,10 +9,10 @@ Subject: [PATCH 7/7] Fixed opaque flip swap chains blocking Present in Windows
  1 file changed, 4 insertions(+), 3 deletions(-)
 
 diff --git a/src/gui/rhi/qrhid3d11.cpp b/src/gui/rhi/qrhid3d11.cpp
-index eb7643d0..bf185600 100644
+index b6c6ffd4..7c107477 100644
 --- a/src/gui/rhi/qrhid3d11.cpp
 +++ b/src/gui/rhi/qrhid3d11.cpp
-@@ -5313,7 +5313,9 @@ bool QD3D11SwapChain::createOrResizeWin7()
+@@ -5323,7 +5323,9 @@ bool QD3D11SwapChain::createOrResizeWin7()
      HRESULT hr;
  
      const bool needsAlpha = m_flags.testFlag(SurfaceHasPreMulAlpha) || m_flags.testFlag(SurfaceHasNonPreMulAlpha);
@@ -23,7 +23,7 @@ index eb7643d0..bf185600 100644
  
      // Try DirectComposition for alpha transparency (available on Win8+).
      // On actual Win7, DirectComposition is not available, so alpha will not work.
-@@ -5343,9 +5345,8 @@ bool QD3D11SwapChain::createOrResizeWin7()
+@@ -5353,9 +5355,8 @@ bool QD3D11SwapChain::createOrResizeWin7()
          canUseFlipModel = false;
  
      swapInterval = m_flags.testFlag(QRhiSwapChain::NoVSync) ? 0 : 1;
@@ -34,6 +34,3 @@ index eb7643d0..bf185600 100644
  
      if (!swapChain) { // First-time creation
          HWND hwnd = reinterpret_cast<HWND>(window->winId());
--- 
-2.53.0.windows.2
-

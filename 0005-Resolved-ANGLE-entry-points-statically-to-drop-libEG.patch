@@ -133,6 +133,3 @@ index 35b2466a..2eb47832 100644
  
      return glBindTexture && glCreateShader && glClearDepthf;
  }
--- 
-2.53.0.windows.2
-

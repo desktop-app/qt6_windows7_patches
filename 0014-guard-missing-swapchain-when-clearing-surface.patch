@@ -4,9 +4,10 @@ Swap-chain creation can fail while creating or replacing a device. Avoid
 calling clearSurface with no swap chain before the normal flush can retry.
 
 diff --git a/src/gui/painting/qbackingstoredefaultcompositor.cpp b/src/gui/painting/qbackingstoredefaultcompositor.cpp
+index d37ae6f0..80cc4725 100644
 --- a/src/gui/painting/qbackingstoredefaultcompositor.cpp
 +++ b/src/gui/painting/qbackingstoredefaultcompositor.cpp
-@@ -475,7 +475,7 @@ QBackingStoreDefaultCompositor::clearSurface(QRhi *rhi,
+@@ -478,7 +478,7 @@ QBackingStoreDefaultCompositor::clearSurface(QRhi *rhi,
                                               QRhiSwapChain *swapchain, QWindow *window,
                                               const QColor &clearColor)
  {

@@ -50,7 +50,7 @@ Subject: [PATCH 1/7] Added Windows 7 backport from qt6windows7.
  create mode 100644 src/plugins/platforms/windows/uiautomation/qwindowsuiawrapper_p.h
 
 diff --git a/src/corelib/CMakeLists.txt b/src/corelib/CMakeLists.txt
-index 8c9e61e2..ec651259 100644
+index 7c4a358b..373032ca 100644
 --- a/src/corelib/CMakeLists.txt
 +++ b/src/corelib/CMakeLists.txt
 @@ -605,7 +605,7 @@ endif()
@@ -70,7 +70,7 @@ index 8c9e61e2..ec651259 100644
          global/qoperatingsystemversion_win.cpp global/qoperatingsystemversion_win_p.h
          global/qt_windows.h
          io/qfilesystemengine_win.cpp
-@@ -1547,6 +1548,7 @@ qt_internal_extend_target(Core CONDITION QT_FEATURE_ctf
+@@ -1548,6 +1549,7 @@ qt_internal_extend_target(Core CONDITION QT_FEATURE_ctf
  set_source_files_properties(
      thread/qmutex_mac.cpp
      thread/qmutex_unix.cpp
@@ -1020,7 +1020,7 @@ index c205f31a..287e50ea 100644
              disableService = true;
              qWarning("QDxgiVSyncService: CreateDXGIFactory2 failed: %s", qPrintable(QSystemError::windowsComString(hr)));
 diff --git a/src/gui/rhi/qrhid3d11.cpp b/src/gui/rhi/qrhid3d11.cpp
-index 9b9b6185..e7182d6b 100644
+index fa1e8450..ca9f100f 100644
 --- a/src/gui/rhi/qrhid3d11.cpp
 +++ b/src/gui/rhi/qrhid3d11.cpp
 @@ -12,6 +12,8 @@
@@ -1067,7 +1067,7 @@ index 9b9b6185..e7182d6b 100644
      return result;
  }
  
-@@ -5274,8 +5292,173 @@ bool QRhiD3D11::ensureDirectCompositionDevice()
+@@ -5284,8 +5302,173 @@ bool QRhiD3D11::ensureDirectCompositionDevice()
  static const DXGI_FORMAT DEFAULT_FORMAT = DXGI_FORMAT_R8G8B8A8_UNORM;
  static const DXGI_FORMAT DEFAULT_SRGB_FORMAT = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
  
@@ -1241,7 +1241,7 @@ index 9b9b6185..e7182d6b 100644
      // Can be called multiple times due to window resizes - that is not the
      // same as a simple destroy+create (as with other resources). Just need to
      // resize the buffers then.
-@@ -5504,7 +5687,7 @@ bool QD3D11SwapChain::createOrResize()
+@@ -5514,7 +5697,7 @@ bool QD3D11SwapChain::createOrResize()
      // Some explanation from
      // https://docs.microsoft.com/en-us/windows/win32/direct3ddxgi/dxgi-1-4-improvements
      //
@@ -1265,7 +1265,7 @@ index 6006211e..f6a2b764 100644
      bool newColorBuffer(const QSize &size, DXGI_FORMAT format, DXGI_SAMPLE_DESC sampleDesc,
                          ID3D11Texture2D **tex, ID3D11RenderTargetView **rtv) const;
 diff --git a/src/gui/rhi/qrhid3d12.cpp b/src/gui/rhi/qrhid3d12.cpp
-index 2ded95fb..4e5e9000 100644
+index cee8790f..5f28dc2e 100644
 --- a/src/gui/rhi/qrhid3d12.cpp
 +++ b/src/gui/rhi/qrhid3d12.cpp
 @@ -202,21 +202,37 @@ static inline QD3D12RenderTargetData *rtData(QRhiRenderTarget *rt)
@@ -1351,7 +1351,7 @@ index 2ded95fb..4e5e9000 100644
          return {};
  
      QRhi::AdapterList list;
-@@ -3022,6 +3044,9 @@ QD3D12Descriptor QD3D12SamplerManager::getShaderVisibleDescriptor(const D3D12_SA
+@@ -3030,6 +3052,9 @@ QD3D12Descriptor QD3D12SamplerManager::getShaderVisibleDescriptor(const D3D12_SA
      return descriptor;
  }
  
@@ -1361,7 +1361,7 @@ index 2ded95fb..4e5e9000 100644
  QD3D12Descriptor QD3D12SamplerManager::getShaderVisibleDescriptors(const QVarLengthArray<Q_D3D12_SAMPLER_DESC, 8> &descs)
  {
      // Deliberately keyed on the sampler descriptions, not on the QRhiSampler
-@@ -3098,9 +3123,15 @@ bool QD3D12MipmapGenerator::create(QRhiD3D12 *rhiD)
+@@ -3106,9 +3131,15 @@ bool QD3D12MipmapGenerator::create(QRhiD3D12 *rhiD)
      rsDesc.Desc_1_1.pParameters = rootParams;
      rsDesc.Desc_1_1.NumStaticSamplers = 1;
      rsDesc.Desc_1_1.pStaticSamplers = &samplerDesc;
@@ -1378,7 +1378,7 @@ index 2ded95fb..4e5e9000 100644
      if (FAILED(hr)) {
          qWarning("Failed to serialize root signature: %s", qPrintable(QSystemError::windowsComString(hr)));
          return false;
-@@ -3352,7 +3383,7 @@ bool QD3D12MipmapGenerator3D::create(QRhiD3D12 *rhiD)
+@@ -3360,7 +3391,7 @@ bool QD3D12MipmapGenerator3D::create(QRhiD3D12 *rhiD)
      rsDesc.Desc_1_1.pStaticSamplers = &samplerDesc;
  
      ID3DBlob *signature = nullptr;
@@ -1387,7 +1387,7 @@ index 2ded95fb..4e5e9000 100644
      if (FAILED(hr)) {
          qWarning("Failed to serialize root signature: %s", qPrintable(QSystemError::windowsComString(hr)));
          return false;
-@@ -5568,6 +5599,9 @@ QD3D12ObjectHandle QD3D12ShaderResourceBindings::createRootSignature(const QD3D1
+@@ -5578,6 +5609,9 @@ QD3D12ObjectHandle QD3D12ShaderResourceBindings::createRootSignature(const QD3D1
                                                                       int stageCount)
  {
      QRHI_RES_RHI(QRhiD3D12);
@@ -1397,7 +1397,7 @@ index 2ded95fb..4e5e9000 100644
  
      // It's not just that the root signature has to be tied to the pipeline
      // (cannot just freely create it like e.g. with Vulkan where one just
-@@ -5653,7 +5687,7 @@ QD3D12ObjectHandle QD3D12ShaderResourceBindings::createRootSignature(const QD3D1
+@@ -5663,7 +5697,7 @@ QD3D12ObjectHandle QD3D12ShaderResourceBindings::createRootSignature(const QD3D1
      rsDesc.Desc_1_1.Flags = D3D12_ROOT_SIGNATURE_FLAGS(rsFlags);
  
      ID3DBlob *signature = nullptr;
@@ -2246,7 +2246,7 @@ index ab3d5c7c..0642afad 100644
  
      m_fonts[SystemFont] = new QFont(QWindowsFontDatabase::systemDefaultFont());
 diff --git a/src/plugins/platforms/windows/qwindowswindow.cpp b/src/plugins/platforms/windows/qwindowswindow.cpp
-index 45ad9383..a083c0ae 100644
+index 9dc507ed..85f70081 100644
 --- a/src/plugins/platforms/windows/qwindowswindow.cpp
 +++ b/src/plugins/platforms/windows/qwindowswindow.cpp
 @@ -529,8 +529,12 @@ static void setWindowOpacity(HWND hwnd, Qt::WindowFlags flags, bool hasAlpha, bo
@@ -2326,7 +2326,7 @@ index 45ad9383..a083c0ae 100644
  }
  
  QSurfaceFormat QWindowsWindow::format() const
-@@ -2184,7 +2194,7 @@ void QWindowsWindow::handleDpiChanged(HWND hwnd, WPARAM wParam, LPARAM lParam)
+@@ -2203,7 +2213,7 @@ void QWindowsWindow::handleDpiChanged(HWND hwnd, WPARAM wParam, LPARAM lParam)
  
  void QWindowsWindow::handleDpiChangedAfterParent(HWND hwnd)
  {
@@ -2788,6 +2788,3 @@ index 9b9f28cb..fa116e6e 100644
  
      default:
          break;
--- 
-2.53.0.windows.2
-

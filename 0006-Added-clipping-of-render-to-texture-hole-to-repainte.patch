@@ -28,6 +28,3 @@ index 979833d0..3b69083d 100644
                      p.drawImage(q->rect(), img);
                      skipPaintEvent = true;
                  }
--- 
-2.53.0.windows.2
-
