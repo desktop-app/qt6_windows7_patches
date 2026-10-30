@@ -1,16 +1,17 @@
-Subject: [PATCH] Propagate ANGLE backing-store clear failures
+From 3bd5f9ce205d07b8e26458d6fd8bc596c4f0fb5b Mon Sep 17 00:00:00 2001
+From: 23rd <23rd@vivaldi.net>
+Date: Thu, 29 Oct 2026 19:38:36 +0000
+Subject: [PATCH 11/17] Propagate ANGLE backing-store clear failures
 
-Keep the custom clearSurface path consistent with upstream compositor fix
-55509687f3ac5a70deb7055dcf91f83cb8c62207. Stop after a failed initial resize
-and propagate device loss or other presentation failures to the caller.
-The normal flush path is covered for every architecture by common patch
-0064-backport-rhi-compositor-failure-handling.patch; do not duplicate it here.
+---
+ .../painting/qbackingstoredefaultcompositor.cpp    | 14 +++++++++++---
+ 1 file changed, 11 insertions(+), 3 deletions(-)
 
 diff --git a/src/gui/painting/qbackingstoredefaultcompositor.cpp b/src/gui/painting/qbackingstoredefaultcompositor.cpp
-index 88842040..d37ae6f0 100644
+index d3e00edb..92500109 100644
 --- a/src/gui/painting/qbackingstoredefaultcompositor.cpp
 +++ b/src/gui/painting/qbackingstoredefaultcompositor.cpp
-@@ -490,8 +490,12 @@ QBackingStoreDefaultCompositor::clearSurface(QRhi *rhi,
+@@ -484,8 +484,12 @@ QBackingStoreDefaultCompositor::clearSurface(QRhi *rhi,
  
      QWindowPrivate::get(window)->lastComposeTime.start();
  
@@ -25,7 +26,7 @@ index 88842040..d37ae6f0 100644
  
      // Start recording a new frame.
      QRhi::FrameOpResult frameResult = rhi->beginFrame(swapchain);
-@@ -525,7 +529,11 @@ QBackingStoreDefaultCompositor::clearSurface(QRhi *rhi,
+@@ -519,7 +523,11 @@ QBackingStoreDefaultCompositor::clearSurface(QRhi *rhi,
      } else
          render();
  

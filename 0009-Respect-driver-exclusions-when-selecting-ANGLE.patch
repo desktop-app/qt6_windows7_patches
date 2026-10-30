@@ -1,10 +1,7 @@
-Subject: [PATCH] Respect driver exclusions when selecting ANGLE
-
-Preserve the supported-renderer filtering used by the Qt 5 Windows
-integration and qtbase_5.15.19/0012-env-select-static-angle-backend.patch. Automatic ANGLE
-selection tries only permitted D3D11/D3D9 backends; explicit selections
-also honor the driver bug list. Do not retry with an unconstrained EGL
-display when the permitted backends fail to initialize.
+From e1796ebe7cdb735850e8ee0c4e94fd58f272a854 Mon Sep 17 00:00:00 2001
+From: 23rd <23rd@vivaldi.net>
+Date: Thu, 29 Oct 2026 19:38:35 +0000
+Subject: [PATCH 09/17] Respect driver exclusions when selecting ANGLE
 
 ---
  .../platforms/windows/qwindowseglcontext.cpp  | 13 ++++++-------
@@ -39,10 +36,10 @@ index 93ac688a..4d15fb6e 100644
      }
  
 diff --git a/src/plugins/platforms/windows/qwindowsintegration.cpp b/src/plugins/platforms/windows/qwindowsintegration.cpp
-index 2a9f4a8e..3d7b088b 100644
+index 10321b83..5fe77a8e 100644
 --- a/src/plugins/platforms/windows/qwindowsintegration.cpp
 +++ b/src/plugins/platforms/windows/qwindowsintegration.cpp
-@@ -381,15 +381,26 @@ QWindowsStaticOpenGLContext *QWindowsStaticOpenGLContext::doCreate()
+@@ -383,15 +383,26 @@ QWindowsStaticOpenGLContext *QWindowsStaticOpenGLContext::doCreate()
          qCWarning(lcQpaGl, "System OpenGL failed. Falling back to Software OpenGL.");
          return QOpenGLStaticContext::create(true);
  #if QT_CONFIG(egl)

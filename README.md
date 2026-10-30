@@ -1,6 +1,6 @@
 # qt6_windows7_patches
 
-Patches that make **qtbase 6.11.3** build and run on **Windows 7, 8 and 8.1**, and restore
+Patches that make **qtbase 6.12.0** build and run on **Windows 7, 8 and 8.1**, and restore
 the ANGLE OpenGL ES / EGL backend Qt 6 dropped.
 
 ## Applying
@@ -30,7 +30,7 @@ This series first, `qtbase_$QT` on top.
 ## The series
 
 Cumulative, apply in order. `0001` is the upstream backport as it came, everything after it
-is a separate change on top. Nothing here duplicates `qtbase_6.11.3` patches, they apply on top.
+is a separate change on top. Nothing here duplicates `qtbase_6.12.0` patches, they apply on top.
 
 | Patch | Files | What it is |
 | --- | --- | --- |
@@ -40,7 +40,7 @@ is a separate change on top. Nothing here duplicates `qtbase_6.11.3` patches, th
 | 0004 | 40 | ANGLE OpenGL ES and EGL backend, from [dimula73/qtbase](https://github.com/dimula73/qtbase) `for-krita/6.11.0`, minus its env-gated resize experiments |
 | 0005 | 1 | ANGLE entry points resolved statically, so `libEGL.dll` and `libGLESv2.dll` are not shipped |
 | 0006 | 1 | Render-to-texture hole clipped to repainted region, also from Krita fork |
-| 0007 | 1 | Opaque windows on blit (DISCARD) swap chain so Present never blocks, same as `qtbase_6.11.3` change for stock path |
+| 0007 | 1 | Opaque windows on blit (DISCARD) swap chain so Present never blocks, same as `qtbase_6.12.0` change for stock path |
 | 0008 | 10 | ANGLE device-loss and resource recovery ported from our Qt 5 patches |
 | 0009 | 2 | GPU driver exclusions preserved when selecting ANGLE backends |
 | 0010 | 1 | System DPI, metrics and font scaling preserved in legacy Windows shims |

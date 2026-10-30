@@ -1,13 +1,17 @@
-Subject: [PATCH] Guard a missing swap chain in the ANGLE clear path
+From e67446ee94482108722e6f9f8256212aca653ff5 Mon Sep 17 00:00:00 2001
+From: 23rd <23rd@vivaldi.net>
+Date: Thu, 29 Oct 2026 19:38:38 +0000
+Subject: [PATCH 14/17] Guard a missing swap chain in the ANGLE clear path
 
-Swap-chain creation can fail while creating or replacing a device. Avoid
-calling clearSurface with no swap chain before the normal flush can retry.
+---
+ src/gui/painting/qbackingstoredefaultcompositor.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/src/gui/painting/qbackingstoredefaultcompositor.cpp b/src/gui/painting/qbackingstoredefaultcompositor.cpp
-index d37ae6f0..80cc4725 100644
+index 92500109..6e3c444e 100644
 --- a/src/gui/painting/qbackingstoredefaultcompositor.cpp
 +++ b/src/gui/painting/qbackingstoredefaultcompositor.cpp
-@@ -478,7 +478,7 @@ QBackingStoreDefaultCompositor::clearSurface(QRhi *rhi,
+@@ -472,7 +472,7 @@ QBackingStoreDefaultCompositor::clearSurface(QRhi *rhi,
                                               QRhiSwapChain *swapchain, QWindow *window,
                                               const QColor &clearColor)
  {

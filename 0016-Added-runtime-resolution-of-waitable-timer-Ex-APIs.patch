@@ -1,0 +1,76 @@
+From a70edcf42dba680578a5a065b2e2ef9c60f394b0 Mon Sep 17 00:00:00 2001
+From: 23rd <23rd@vivaldi.net>
+Date: Fri, 30 Oct 2026 08:36:26 +0000
+Subject: [PATCH 16/17] Added runtime resolution of waitable timer Ex APIs.
+
+---
+ src/corelib/thread/qthread_win.cpp | 56 +++++++++++++++++++-----------
+ 1 file changed, 36 insertions(+), 20 deletions(-)
+
+diff --git a/src/corelib/thread/qthread_win.cpp b/src/corelib/thread/qthread_win.cpp
+index 1366c4d2..866231f9 100644
+--- a/src/corelib/thread/qthread_win.cpp
++++ b/src/corelib/thread/qthread_win.cpp
+@@ -390,26 +390,42 @@ void QThread::sleep(std::chrono::nanoseconds nsecs)
+ {
+     using namespace std::chrono;
+     if (nsecs < 30ms) {
+-        QUniqueWin32NullHandle waitableTimerHandle;
+-        waitableTimerHandle.reset(CreateWaitableTimerEx(
+-                nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS));
+-        if (waitableTimerHandle) {
+-            using namespace std::chrono_literals;
+-            // SetWaitableTimerEx's uses intervals of 100ns (0.1µs)
+-            const auto ticks100ns = ceil<QtPrivate::win32_ticks>(nsecs);
+-            LARGE_INTEGER i;
+-            // Negate to make it a relative timeout:
+-            i.QuadPart = std::min(-(ticks100ns.count()), -1ll);
+-            BOOL timerResult = SetWaitableTimerEx(
+-                    waitableTimerHandle.get(), &i,
+-                    0, // not periodic
+-                    nullptr, nullptr, // no callback
+-                    nullptr, // no wake context / don't wake from sleep
+-                    0); // lowest tolerated delay
+-
+-            if (timerResult == TRUE) {
+-                if (WaitForSingleObject(waitableTimerHandle.get(), INFINITE) == ERROR_SUCCESS)
+-                    return;
++        // Patch: the Ex APIs are missing before Windows 8, resolve them at
++        // runtime and fall back to Sleep when they are not available.
++        using CreateWaitableTimerExWPtr =
++                HANDLE (WINAPI *)(LPSECURITY_ATTRIBUTES, LPCWSTR, DWORD, DWORD);
++        using SetWaitableTimerExPtr =
++                BOOL (WINAPI *)(HANDLE, const LARGE_INTEGER *, LONG, BOOL,
++                                PTIMERAPCROUTINE, LPVOID, ULONG);
++        static const auto createWaitableTimerEx =
++                reinterpret_cast<CreateWaitableTimerExWPtr>(::GetProcAddress(
++                        ::GetModuleHandle(L"kernel32.dll"), "CreateWaitableTimerExW"));
++        static const auto setWaitableTimerEx = createWaitableTimerEx
++                ? reinterpret_cast<SetWaitableTimerExPtr>(::GetProcAddress(
++                        ::GetModuleHandle(L"kernel32.dll"), "SetWaitableTimerExW"))
++                : nullptr;
++        if (createWaitableTimerEx && setWaitableTimerEx) {
++            QUniqueWin32NullHandle waitableTimerHandle;
++            waitableTimerHandle.reset(createWaitableTimerEx(
++                    nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS));
++            if (waitableTimerHandle) {
++                using namespace std::chrono_literals;
++                // SetWaitableTimerEx's uses intervals of 100ns (0.1µs)
++                const auto ticks100ns = ceil<QtPrivate::win32_ticks>(nsecs);
++                LARGE_INTEGER i;
++                // Negate to make it a relative timeout:
++                i.QuadPart = std::min(-(ticks100ns.count()), -1ll);
++                BOOL timerResult = setWaitableTimerEx(
++                        waitableTimerHandle.get(), &i,
++                        0, // not periodic
++                        nullptr, nullptr, // no callback
++                        nullptr, // no wake context / don't wake from sleep
++                        0); // lowest tolerated delay
++
++                if (timerResult == TRUE) {
++                    if (WaitForSingleObject(waitableTimerHandle.get(), INFINITE) == ERROR_SUCCESS)
++                        return;
++                }
+             }
+         }
+     }

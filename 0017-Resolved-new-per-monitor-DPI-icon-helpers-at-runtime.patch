@@ -1,0 +1,73 @@
+From 5bea22e991b1e3fc0ac71d9f73cc43c6e1518777 Mon Sep 17 00:00:00 2001
+From: 23rd <23rd@vivaldi.net>
+Date: Fri, 30 Oct 2026 14:25:17 +0000
+Subject: [PATCH 17/17] Resolved new per-monitor DPI icon helpers at runtime.
+
+---
+ .../platforms/windows/qwindowswindow.cpp      | 39 +++++++++++++++++--
+ 1 file changed, 35 insertions(+), 4 deletions(-)
+
+diff --git a/src/plugins/platforms/windows/qwindowswindow.cpp b/src/plugins/platforms/windows/qwindowswindow.cpp
+index f7ff1912..4b522825 100644
+--- a/src/plugins/platforms/windows/qwindowswindow.cpp
++++ b/src/plugins/platforms/windows/qwindowswindow.cpp
+@@ -3846,7 +3846,38 @@ static UINT primaryScreenDpi()
+         if (SUCCEEDED(GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &dpiX, &dpiY)))
+             return dpiX;
+     }
+-    return GetDpiForSystem();
++    // Patch: GetDpiForSystem is missing before Windows 10 1607, fall back to
++    // the LOGPIXELSX of the primary monitor.
++    static const auto getDpiForSystem = reinterpret_cast<UINT (WINAPI *)()>(
++            ::GetProcAddress(::GetModuleHandle(L"user32.dll"), "GetDpiForSystem"));
++    if (getDpiForSystem)
++        return getDpiForSystem();
++    if (const HDC hdc = GetDC(nullptr)) {
++        const UINT dpi = UINT(GetDeviceCaps(hdc, LOGPIXELSX));
++        ReleaseDC(nullptr, hdc);
++        return dpi;
++    }
++    return UINT(QWindowsScreen::baseDpi);
++}
++
++static int systemMetricsForDpi(int metric, UINT dpi)
++{
++    // Patch: GetSystemMetricsForDpi is missing before Windows 10 1607, fall
++    // back to the unscaled metric, like the previous behavior.
++    static const auto getSystemMetricsForDpi = reinterpret_cast<int (WINAPI *)(INT, UINT)>(
++            ::GetProcAddress(::GetModuleHandle(L"user32.dll"), "GetSystemMetricsForDpi"));
++    if (getSystemMetricsForDpi)
++        return getSystemMetricsForDpi(metric, dpi);
++    return GetSystemMetrics(metric);
++}
++
++static UINT getWindowDpi(HWND hwnd)
++{
++    // Patch: GetDpiForWindow is missing before Windows 10 1607; zero makes the
++    // caller fall back to the base DPI.
++    static const auto getDpiForWindow = reinterpret_cast<UINT (WINAPI *)(HWND)>(
++            ::GetProcAddress(::GetModuleHandle(L"user32.dll"), "GetDpiForWindow"));
++    return getDpiForWindow ? getDpiForWindow(hwnd) : 0;
+ }
+ 
+ static HICON createHIcon(const QIcon &icon, UINT dpi, int xSizeMetric, int ySizeMetric)
+@@ -3859,8 +3890,8 @@ static HICON createHIcon(const QIcon &icon, UINT dpi, int xSizeMetric, int ySize
+         // corresponding device pixel ratio rather than 1, so that QIcon can
+         // pick a representation authored for fractional scale factors.
+         const qreal dpr = qreal(dpi) / QWindowsScreen::baseDpi;
+-        const QSize physicalSize(GetSystemMetricsForDpi(xSizeMetric, dpi),
+-                                 GetSystemMetricsForDpi(ySizeMetric, dpi));
++        const QSize physicalSize(systemMetricsForDpi(xSizeMetric, dpi),
++                                 systemMetricsForDpi(ySizeMetric, dpi));
+         const QPixmap pm = icon.pixmap(icon.actualSize(physicalSize / dpr), dpr);
+         if (!pm.isNull())
+             return qt_pixmapToWinHICON(pm);
+@@ -3877,7 +3908,7 @@ void QWindowsWindow::setWindowIcon(const QIcon &icon)
+         // monitor the window is shown on. Note: Do not use savedDpi() here, it is
+         // initialized in initialize(), whereas setWindowIcon() is already called
+         // from the constructor.
+-        const UINT windowDpi = GetDpiForWindow(m_data.hwnd);
++        const UINT windowDpi = getWindowDpi(m_data.hwnd);
+         const UINT titleBarDpi = windowDpi ? windowDpi : UINT(QWindowsScreen::baseDpi);
+         m_iconSmall = createHIcon(icon, titleBarDpi, SM_CXSMICON, SM_CYSMICON);
+ 

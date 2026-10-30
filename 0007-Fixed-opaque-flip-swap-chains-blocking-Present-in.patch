@@ -1,18 +1,17 @@
-From 72ad9c5f03cdf1e5cf89fbad3a1ca9378144ce6e Mon Sep 17 00:00:00 2001
+From 2f85bcf3cea4049bf37dc5a9a2e82c3b6b7b2c38 Mon Sep 17 00:00:00 2001
 From: 23rd <23rd@vivaldi.net>
-Date: Wed, 2 Sep 2026 15:13:53 +0000
-Subject: [PATCH 7/7] Fixed opaque flip swap chains blocking Present in Windows
- 7 path.
+Date: Thu, 29 Oct 2026 19:38:34 +0000
+Subject: [PATCH 07/17] Fixed opaque flip swap chains blocking Present in
 
 ---
  src/gui/rhi/qrhid3d11.cpp | 7 ++++---
  1 file changed, 4 insertions(+), 3 deletions(-)
 
 diff --git a/src/gui/rhi/qrhid3d11.cpp b/src/gui/rhi/qrhid3d11.cpp
-index b6c6ffd4..7c107477 100644
+index 32b3ce1c..2b784388 100644
 --- a/src/gui/rhi/qrhid3d11.cpp
 +++ b/src/gui/rhi/qrhid3d11.cpp
-@@ -5323,7 +5323,9 @@ bool QD3D11SwapChain::createOrResizeWin7()
+@@ -5409,7 +5409,9 @@ bool QD3D11SwapChain::createOrResizeWin7()
      HRESULT hr;
  
      const bool needsAlpha = m_flags.testFlag(SurfaceHasPreMulAlpha) || m_flags.testFlag(SurfaceHasNonPreMulAlpha);
@@ -23,7 +22,7 @@ index b6c6ffd4..7c107477 100644
  
      // Try DirectComposition for alpha transparency (available on Win8+).
      // On actual Win7, DirectComposition is not available, so alpha will not work.
-@@ -5353,9 +5355,8 @@ bool QD3D11SwapChain::createOrResizeWin7()
+@@ -5439,9 +5441,8 @@ bool QD3D11SwapChain::createOrResizeWin7()
          canUseFlipModel = false;
  
      swapInterval = m_flags.testFlag(QRhiSwapChain::NoVSync) ? 0 : 1;

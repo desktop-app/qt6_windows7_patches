@@ -1,26 +1,7 @@
-Subject: [PATCH] Restore ANGLE display and resource recovery
-
-Port the Windows ANGLE recovery from desktop-app/patches Qt 5.15.19
-0033-gl-context-restore.patch and 0035-debug-gl-context-restore.patch at
-f7433965ed33996c641a822c78a81eef3526c9e7. Their original commits are
-446f47239df3102a9a24304b5e3a8c9bee5784f7 and
-0da942abf8283add899ae783432093e5f8742a12.
-
-Retire lost EGL displays while retaining their context/surface owners,
-track and release old window surfaces, preserve the device-loss teardown
-policy and recreate ANGLE with a fresh display key. Compare/exchange the
-lost display's key instead of throttling key changes by time, so rapid
-successive device losses cannot reuse a poisoned display and a logged
-loss followed by its EGL error advances only once.
-
-Retain Qt 6's deferred QOpenGLWidget wrapper deletion from common patch
-0009, port the GL resource/FBO safeguards, and report invalid contexts
-through the QRhi device-loss path. Restore the Qt 5 ANGLE extension alias
-lookup and safely initialize/retire Qt 6's native EGL context wrapper.
-Apply after the qt6_windows7 ANGLE patches, before the common Qt 6.11.2
-series. The final source also includes common patches 0008 and 0009.
-ANGLE interfaces verified against
-b34c4dc879d115d34794a657c7fa5f6bb34bc10a.
+From 7fadd65fd516bc76b7818a69c3c964984fd9499d Mon Sep 17 00:00:00 2001
+From: 23rd <23rd@vivaldi.net>
+Date: Thu, 29 Oct 2026 19:38:34 +0000
+Subject: [PATCH 08/17] Restore ANGLE display and resource recovery
 
 ---
  src/gui/kernel/qopenglcontext.cpp             |  22 +-
@@ -36,10 +17,10 @@ b34c4dc879d115d34794a657c7fa5f6bb34bc10a.
  10 files changed, 562 insertions(+), 84 deletions(-)
 
 diff --git a/src/gui/kernel/qopenglcontext.cpp b/src/gui/kernel/qopenglcontext.cpp
-index ee578cce..c4ce817b 100644
+index 67c82aba..1721731e 100644
 --- a/src/gui/kernel/qopenglcontext.cpp
 +++ b/src/gui/kernel/qopenglcontext.cpp
-@@ -686,8 +686,11 @@ GLuint QOpenGLContext::defaultFramebufferObject() const
+@@ -687,8 +687,11 @@ GLuint QOpenGLContext::defaultFramebufferObject() const
  bool QOpenGLContext::makeCurrent(QSurface *surface)
  {
      Q_D(QOpenGLContext);
@@ -52,7 +33,7 @@ index ee578cce..c4ce817b 100644
  
      if (Q_UNLIKELY(!qApp->testAttribute(Qt::AA_DontCheckOpenGLContextThreadAffinity)
                     && thread() != QThread::currentThread())) {
-@@ -806,8 +809,11 @@ QSurface *QOpenGLContext::surface() const
+@@ -807,8 +810,11 @@ QSurface *QOpenGLContext::surface() const
  void QOpenGLContext::swapBuffers(QSurface *surface)
  {
      Q_D(QOpenGLContext);
@@ -65,7 +46,7 @@ index ee578cce..c4ce817b 100644
  
      if (!surface) {
          qWarning("QOpenGLContext::swapBuffers() called with null argument");
-@@ -829,6 +835,11 @@ void QOpenGLContext::swapBuffers(QSurface *surface)
+@@ -830,6 +836,11 @@ void QOpenGLContext::swapBuffers(QSurface *surface)
  #endif
      if (surface->format().swapBehavior() == QSurfaceFormat::SingleBuffer)
          functions()->glFlush();
@@ -77,7 +58,7 @@ index ee578cce..c4ce817b 100644
      d->platformGLContext->swapBuffers(surfaceHandle);
  }
  
-@@ -1145,6 +1156,8 @@ void QOpenGLContextGroupPrivate::cleanup()
+@@ -1146,6 +1157,8 @@ void QOpenGLContextGroupPrivate::cleanup()
  
      m_sharedResources.clear();
  
@@ -86,7 +67,7 @@ index ee578cce..c4ce817b 100644
      qDeleteAll(m_pendingDeletion.begin(), m_pendingDeletion.end());
      m_pendingDeletion.clear();
  }
-@@ -1159,7 +1172,10 @@ void QOpenGLContextGroupPrivate::deletePendingResources(QOpenGLContext *ctx)
+@@ -1160,7 +1173,10 @@ void QOpenGLContextGroupPrivate::deletePendingResources(QOpenGLContext *ctx)
      QList<QOpenGLSharedResource *>::const_iterator it = pending.begin();
      QList<QOpenGLSharedResource *>::const_iterator end = pending.end();
      while (it != end) {
@@ -99,10 +80,10 @@ index ee578cce..c4ce817b 100644
          ++it;
      }
 diff --git a/src/gui/rhi/qrhigles2.cpp b/src/gui/rhi/qrhigles2.cpp
-index 416ffe3b..df04339b 100644
+index 8e1b9f8e..2799bf3e 100644
 --- a/src/gui/rhi/qrhigles2.cpp
 +++ b/src/gui/rhi/qrhigles2.cpp
-@@ -689,6 +689,12 @@ QSurface *QRhiGles2::evaluateFallbackSurface() const
+@@ -705,6 +705,12 @@ QSurface *QRhiGles2::evaluateFallbackSurface() const
  
  bool QRhiGles2::ensureContext(QSurface *surface) const
  {
@@ -114,8 +95,8 @@ index 416ffe3b..df04339b 100644
 +    }
      if (!surface) {
          // null means any surface is good because not going to render
-         if (currentSurfaceForCurrentContext(ctx))
-@@ -2346,6 +2352,10 @@ QRhi::FrameOpResult QRhiGles2::beginFrame(QRhiSwapChain *swapChain, QRhi::BeginF
+ 
+@@ -2470,6 +2476,10 @@ QRhi::FrameOpResult QRhiGles2::beginFrame(QRhiSwapChain *swapChain, QRhi::BeginF
          return contextLost ? QRhi::FrameOpDeviceLost : QRhi::FrameOpError;
  
      ctx->handle()->beginFrame();
@@ -126,7 +107,7 @@ index 416ffe3b..df04339b 100644
  
      currentSwapChain = swapChainD;
  
-@@ -2398,6 +2408,10 @@ QRhi::FrameOpResult QRhiGles2::endFrame(QRhiSwapChain *swapChain, QRhi::EndFrame
+@@ -2522,6 +2532,10 @@ QRhi::FrameOpResult QRhiGles2::endFrame(QRhiSwapChain *swapChain, QRhi::EndFrame
      currentSwapChain = nullptr;
  
      ctx->handle()->endFrame();
@@ -138,10 +119,10 @@ index 416ffe3b..df04339b 100644
      return QRhi::FrameOpSuccess;
  }
 diff --git a/src/opengl/qopenglframebufferobject.cpp b/src/opengl/qopenglframebufferobject.cpp
-index cd329ba0..ceeffb44 100644
+index 1cef35d1..499c1154 100644
 --- a/src/opengl/qopenglframebufferobject.cpp
 +++ b/src/opengl/qopenglframebufferobject.cpp
-@@ -459,6 +459,25 @@ namespace
+@@ -460,6 +460,25 @@ namespace
      {
          funcs->glDeleteTextures(1, &id);
      }
@@ -167,7 +148,7 @@ index cd329ba0..ceeffb44 100644
  }
  
  void Q_TRACE_INSTRUMENT(qtopengl) QOpenGLFramebufferObjectPrivate::init(
-@@ -501,6 +520,10 @@ void Q_TRACE_INSTRUMENT(qtopengl) QOpenGLFramebufferObjectPrivate::init(
+@@ -502,6 +521,10 @@ void Q_TRACE_INSTRUMENT(qtopengl) QOpenGLFramebufferObjectPrivate::init(
  
      funcs.glGenFramebuffers(1, &fbo);
      funcs.glBindFramebuffer(GL_FRAMEBUFFER, fbo);
@@ -178,7 +159,7 @@ index cd329ba0..ceeffb44 100644
  
      QOpenGLContextPrivate::get(ctx)->qgl_current_fbo_invalid = true;
  
-@@ -533,7 +556,10 @@ void QOpenGLFramebufferObjectPrivate::initTexture(int idx)
+@@ -534,7 +557,10 @@ void QOpenGLFramebufferObjectPrivate::initTexture(int idx)
      GLuint texture = 0;
  
      funcs.glGenTextures(1, &texture);
@@ -190,7 +171,7 @@ index cd329ba0..ceeffb44 100644
  
      funcs.glTexParameteri(target, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
      funcs.glTexParameteri(target, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-@@ -614,6 +640,10 @@ void QOpenGLFramebufferObjectPrivate::initColorBuffer(int idx, GLint *samples)
+@@ -615,6 +641,10 @@ void QOpenGLFramebufferObjectPrivate::initColorBuffer(int idx, GLint *samples)
  
      funcs.glGenRenderbuffers(1, &color_buffer);
      funcs.glBindRenderbuffer(GL_RENDERBUFFER, color_buffer);
@@ -201,7 +182,7 @@ index cd329ba0..ceeffb44 100644
      funcs.glRenderbufferStorageMultisample(GL_RENDERBUFFER, *samples, storageFormat, color.size.width(), color.size.height());
      funcs.glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + idx,
                                      GL_RENDERBUFFER, color_buffer);
-@@ -670,7 +700,10 @@ void QOpenGLFramebufferObjectPrivate::initDepthStencilAttachments(QOpenGLContext
+@@ -671,7 +701,10 @@ void QOpenGLFramebufferObjectPrivate::initDepthStencilAttachments(QOpenGLContext
      if (attachment == QOpenGLFramebufferObject::CombinedDepthStencil) {
          funcs.glGenRenderbuffers(1, &depth_buffer);
          funcs.glBindRenderbuffer(GL_RENDERBUFFER, depth_buffer);
@@ -213,7 +194,7 @@ index cd329ba0..ceeffb44 100644
  
          if (samples != 0 ) {
              funcs.glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples,
-@@ -696,7 +729,10 @@ void QOpenGLFramebufferObjectPrivate::initDepthStencilAttachments(QOpenGLContext
+@@ -697,7 +730,10 @@ void QOpenGLFramebufferObjectPrivate::initDepthStencilAttachments(QOpenGLContext
          // depth and stencil buffer needs another extension
          funcs.glGenRenderbuffers(1, &depth_buffer);
          funcs.glBindRenderbuffer(GL_RENDERBUFFER, depth_buffer);
@@ -225,7 +206,7 @@ index cd329ba0..ceeffb44 100644
          if (samples != 0 && funcs.hasOpenGLExtension(QOpenGLExtensions::FramebufferMultisample))
              funcs.glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples,
                  GL_DEPTH24_STENCIL8, dsSize.width(), dsSize.height());
-@@ -722,7 +758,10 @@ void QOpenGLFramebufferObjectPrivate::initDepthStencilAttachments(QOpenGLContext
+@@ -723,7 +759,10 @@ void QOpenGLFramebufferObjectPrivate::initDepthStencilAttachments(QOpenGLContext
      {
          funcs.glGenRenderbuffers(1, &depth_buffer);
          funcs.glBindRenderbuffer(GL_RENDERBUFFER, depth_buffer);
@@ -237,7 +218,7 @@ index cd329ba0..ceeffb44 100644
          if (samples != 0 && funcs.hasOpenGLExtension(QOpenGLExtensions::FramebufferMultisample)) {
              if (ctx->isOpenGLES()) {
                  if (funcs.hasOpenGLExtension(QOpenGLExtensions::Depth24))
-@@ -760,7 +799,10 @@ void QOpenGLFramebufferObjectPrivate::initDepthStencilAttachments(QOpenGLContext
+@@ -761,7 +800,10 @@ void QOpenGLFramebufferObjectPrivate::initDepthStencilAttachments(QOpenGLContext
      if (stencil_buffer == 0 && (attachment == QOpenGLFramebufferObject::CombinedDepthStencil)) {
          funcs.glGenRenderbuffers(1, &stencil_buffer);
          funcs.glBindRenderbuffer(GL_RENDERBUFFER, stencil_buffer);
@@ -250,10 +231,10 @@ index cd329ba0..ceeffb44 100644
  #if QT_CONFIG(opengles2)
          GLenum storage = GL_STENCIL_INDEX8;
 diff --git a/src/openglwidgets/qopenglwidget.cpp b/src/openglwidgets/qopenglwidget.cpp
-index cea1498d..5f60b043 100644
+index 9ea4ea35..08d1aad7 100644
 --- a/src/openglwidgets/qopenglwidget.cpp
 +++ b/src/openglwidgets/qopenglwidget.cpp
-@@ -757,16 +757,29 @@ void QOpenGLWidgetPrivate::recreateFbos()
+@@ -758,16 +758,29 @@ void QOpenGLWidgetPrivate::recreateFbos()
              resolvedFbos[QOpenGLWidget::RightBuffer] = new QOpenGLFramebufferObject(deviceSize);
      }
  
@@ -285,7 +266,7 @@ index cea1498d..5f60b043 100644
          context->functions()->glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
          ensureRhiDependentResources();
          currentTargetBuffer = QOpenGLWidget::LeftBuffer;
-@@ -857,6 +870,8 @@ void QOpenGLWidgetPrivate::initialize()
+@@ -858,6 +871,8 @@ void QOpenGLWidgetPrivate::initialize()
      context->setFormat(requestedFormat);
  
      QOpenGLContext *shareContext = contextFromRhi ? contextFromRhi : QOpenGLContext::globalShareContext();
@@ -1041,7 +1022,7 @@ index 348c93b4..19489a14 100644
      EGLenum m_api = EGL_OPENGL_ES_API;
      int m_swapInterval = -1;
 diff --git a/src/plugins/platforms/windows/qwindowsintegration.cpp b/src/plugins/platforms/windows/qwindowsintegration.cpp
-index da4c760f..2a9f4a8e 100644
+index 2cf0a2ec..10321b83 100644
 --- a/src/plugins/platforms/windows/qwindowsintegration.cpp
 +++ b/src/plugins/platforms/windows/qwindowsintegration.cpp
 @@ -230,6 +230,10 @@ void QWindowsIntegrationPrivate::parseOptions(QWindowsIntegration *q, const QStr
@@ -1055,7 +1036,7 @@ index da4c760f..2a9f4a8e 100644
      delete m_fontDatabase;
  }
  
-@@ -432,8 +436,16 @@ QPlatformOpenGLContext *QWindowsIntegration::createPlatformOpenGLContext(QOpenGL
+@@ -434,8 +438,16 @@ QPlatformOpenGLContext *QWindowsIntegration::createPlatformOpenGLContext(QOpenGL
      qCDebug(lcQpaGl) << __FUNCTION__ << context->format();
      if (QWindowsStaticOpenGLContext *staticOpenGLContext = QWindowsIntegration::staticOpenGLContext()) {
          std::unique_ptr<QWindowsOpenGLContext> result(staticOpenGLContext->createContext(context));
@@ -1073,7 +1054,7 @@ index da4c760f..2a9f4a8e 100644
      }
      return nullptr;
  }
-@@ -461,7 +473,7 @@ QOpenGLContext *QWindowsIntegration::createOpenGLContext(HGLRC ctx, HWND window,
+@@ -463,7 +475,7 @@ QOpenGLContext *QWindowsIntegration::createOpenGLContext(HGLRC ctx, HWND window,
      if (auto *staticOpenGLContext = dynamic_cast<QOpenGLStaticContext *>(
                  QWindowsIntegration::staticOpenGLContext())) {
          std::unique_ptr<QWindowsOpenGLContext> result(staticOpenGLContext->createContext(ctx, window));
@@ -1082,7 +1063,7 @@ index da4c760f..2a9f4a8e 100644
              auto *context = new QOpenGLContext;
              context->setShareContext(shareContext);
              auto *contextPrivate = QOpenGLContextPrivate::get(context);
-@@ -482,7 +494,7 @@ QOpenGLContext *QWindowsIntegration::createOpenGLContext(EGLContext context, EGL
+@@ -484,7 +496,7 @@ QOpenGLContext *QWindowsIntegration::createOpenGLContext(EGLContext context, EGL
      if (auto *staticOpenGLContext = dynamic_cast<QWindowsEGLStaticContext *>(
          QWindowsIntegration::staticOpenGLContext())) {
              std::unique_ptr<QWindowsOpenGLContext> result(staticOpenGLContext->createContext(context, display, shareContext));
@@ -1091,7 +1072,7 @@ index da4c760f..2a9f4a8e 100644
              auto *context = new QOpenGLContext;
              context->setShareContext(shareContext);
              auto *contextPrivate = QOpenGLContextPrivate::get(context);
-@@ -502,6 +514,8 @@ QWindowsStaticOpenGLContext *QWindowsIntegration::staticOpenGLContext()
+@@ -504,6 +516,8 @@ QWindowsStaticOpenGLContext *QWindowsIntegration::staticOpenGLContext()
          return nullptr;
      QWindowsIntegrationPrivate *d = integration->d.data();
      QMutexLocker lock(&d->m_staticContextLock);
@@ -1116,7 +1097,7 @@ index 522478b1..f4febf58 100644
      virtual QWindowsOpenGLContext *createContext(QOpenGLContext *context) = 0;
      virtual void *moduleHandle() const = 0;
 diff --git a/src/plugins/platforms/windows/qwindowswindow.cpp b/src/plugins/platforms/windows/qwindowswindow.cpp
-index c838dc5a..39c8d469 100644
+index c9eb1867..f7ff1912 100644
 --- a/src/plugins/platforms/windows/qwindowswindow.cpp
 +++ b/src/plugins/platforms/windows/qwindowswindow.cpp
 @@ -1736,11 +1736,7 @@ void QWindowsWindow::destroyWindow()
@@ -1132,7 +1113,7 @@ index c838dc5a..39c8d469 100644
  #endif
          DestroyWindow(m_data.hwndTitlebar);
          DestroyWindow(m_data.hwnd);
-@@ -3974,7 +3970,7 @@ void QWindowsWindow::setCustomMargins(const QMargins &newCustomMargins)
+@@ -3978,7 +3974,7 @@ void QWindowsWindow::setCustomMargins(const QMargins &newCustomMargins)
      }
  }
  
@@ -1141,7 +1122,7 @@ index c838dc5a..39c8d469 100644
  {
  #if QT_CONFIG(vulkan)
      Q_UNUSED(nativeConfig);
-@@ -3997,11 +3993,16 @@ void *QWindowsWindow::surface(void *nativeConfig, int *err)
+@@ -4001,11 +3997,16 @@ void *QWindowsWindow::surface(void *nativeConfig, int *err)
      return nullptr;
  #endif
  #ifndef QT_NO_OPENGL
@@ -1163,7 +1144,7 @@ index c838dc5a..39c8d469 100644
          }
      }
  
-@@ -4011,6 +4012,24 @@ void *QWindowsWindow::surface(void *nativeConfig, int *err)
+@@ -4015,6 +4016,24 @@ void *QWindowsWindow::surface(void *nativeConfig, int *err)
  #endif
  }
  
@@ -1188,7 +1169,7 @@ index c838dc5a..39c8d469 100644
  void QWindowsWindow::invalidateSurface()
  {
  #if QT_CONFIG(vulkan)
-@@ -4022,11 +4041,7 @@ void QWindowsWindow::invalidateSurface()
+@@ -4026,11 +4045,7 @@ void QWindowsWindow::invalidateSurface()
      }
  #endif
  #ifndef QT_NO_OPENGL

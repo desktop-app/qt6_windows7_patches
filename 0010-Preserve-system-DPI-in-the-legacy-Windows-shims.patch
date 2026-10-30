@@ -1,11 +1,7 @@
-Subject: [PATCH] Preserve system DPI in the legacy Windows shims
-
-Follow up desktop-app/qt6_windows7_patches at
-4366991164017d68c0dfc32e01c603da0e5c50e9. GetDeviceCaps already returns
-system-scaled DPI; applying the inverse scale factor reduced it to 96.
-Report that DPI directly and compute monitor scale in the forward direction.
-Normalize existing system metrics and font dimensions by their source DPI
-before scaling to the requested DPI, preserving them when both match.
+From b1f4e1548a826dc37f0745a72c21f3780f4250f8 Mon Sep 17 00:00:00 2001
+From: 23rd <23rd@vivaldi.net>
+Date: Thu, 29 Oct 2026 19:38:35 +0000
+Subject: [PATCH 10/17] Preserve system DPI in the legacy Windows shims
 
 ---
  src/corelib/global/qlegacyshims_win_p.h | 80 ++++++++++++-------------
