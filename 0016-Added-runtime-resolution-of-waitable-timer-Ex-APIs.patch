@@ -40,14 +40,14 @@ index 1366c4d2..866231f9 100644
 +        using CreateWaitableTimerExWPtr =
 +                HANDLE (WINAPI *)(LPSECURITY_ATTRIBUTES, LPCWSTR, DWORD, DWORD);
 +        using SetWaitableTimerExPtr =
-+                BOOL (WINAPI *)(HANDLE, const LARGE_INTEGER *, LONG, BOOL,
-+                                PTIMERAPCROUTINE, LPVOID, ULONG);
++                BOOL (WINAPI *)(HANDLE, const LARGE_INTEGER *, LONG,
++                                PTIMERAPCROUTINE, LPVOID, const REASON_CONTEXT *, ULONG);
 +        static const auto createWaitableTimerEx =
 +                reinterpret_cast<CreateWaitableTimerExWPtr>(::GetProcAddress(
 +                        ::GetModuleHandle(L"kernel32.dll"), "CreateWaitableTimerExW"));
 +        static const auto setWaitableTimerEx = createWaitableTimerEx
 +                ? reinterpret_cast<SetWaitableTimerExPtr>(::GetProcAddress(
-+                        ::GetModuleHandle(L"kernel32.dll"), "SetWaitableTimerExW"))
++                        ::GetModuleHandle(L"kernel32.dll"), "SetWaitableTimerEx"))
 +                : nullptr;
 +        if (createWaitableTimerEx && setWaitableTimerEx) {
 +            QUniqueWin32NullHandle waitableTimerHandle;
